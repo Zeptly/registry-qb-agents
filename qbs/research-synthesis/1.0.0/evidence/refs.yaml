@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../../../schemas/qb-evidence-refs.schema.json
+# Pointers only. Raw tapes/trajectories live in the evidence store, never in Git.
+# EXAMPLE data: URIs are illustrative.
+apiVersion: qb.zeptly.dev/v1
+kind: QBEvidenceRefs
+for: qb:research-synthesis@1.0.0
+refs:
+  - id: canary-gate-run-1
+    type: eval-run
+    uri: evidence://cortex/eval-runs/research-synthesis/1.0.0/canary-1
+    capturedAt: "2026-09-20T10:00:00Z"
+    blueprintDigest: sha256:78056e47e0dbb0db2c1234b6d230ec47137f514e5020b3bbaede710c3c061651
+    gate: canary
+    result: pass
+    metrics: { task-success-rate: 0.87, citation-coverage: 0.93, cost-p95: 11.2, latency-p95: 4100, replans-mean: 0.6 }
+    redaction: aggregate-only
+    summary: Pre-release evaluation across 3 scenarios x 3 repetitions against the canary gate.
+  - id: stable-gate-run-1
+    type: eval-run
+    uri: evidence://cortex/eval-runs/research-synthesis/1.0.0/stable-1
+    capturedAt: "2026-09-28T10:00:00Z"
+    blueprintDigest: sha256:78056e47e0dbb0db2c1234b6d230ec47137f514e5020b3bbaede710c3c061651
+    gate: stable
+    result: pass
+    metrics: { task-success-rate: 0.9, citation-coverage: 0.96, cost-p95: 10.4, latency-p95: 3900, replans-mean: 0.5 }
+    redaction: aggregate-only
+    summary: Canary-period production sample plus the full suite against the stable gate.

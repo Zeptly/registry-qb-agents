@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../../schemas/qb-evidence-refs.schema.json
+apiVersion: qb.zeptly.dev/v1
+kind: QBEvidenceRefs
+for: qb:research-synthesis@1.1.0
+refs:
+  - id: replan-analysis-wk39
+    type: trajectory-set
+    uri: evidence://cortex/trajectory-sets/research-synthesis/1.0.0/2026-09-wk39-replan-analysis
+    capturedAt: "2026-09-27T00:00:00Z"
+    blueprintDigest: sha256:78056e47e0dbb0db2c1234b6d230ec47137f514e5020b3bbaede710c3c061651
+    redaction: aggregate-only
+    summary: Aggregate analysis of replanning outcomes across sampled 1.0.0 production sessions (the evidence behind the proposal).
+  - id: candidate-gate-run-1
+    type: eval-run
+    uri: evidence://cortex/eval-runs/research-synthesis/1.1.0/candidate-1
+    capturedAt: "2026-09-29T11:00:00Z"
+    blueprintDigest: sha256:21a3b766944aedf1cf1d8137f726c0a72ac524166fad1bec01256b8bdde14999
+    gate: candidate
+    result: pass
+    metrics: { task-success-rate: 0.88, citation-coverage: 0.95, cost-p95: 11.0, latency-p95: 4200, replans-mean: 0.7 }
+    redaction: aggregate-only
+    summary: Candidate-gate evaluation of 1.1.0 against the shipped suite, compared with the 1.0.0 baseline.

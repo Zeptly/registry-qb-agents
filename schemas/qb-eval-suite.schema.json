@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:eval-suite:v1",
+  "title": "QB Evaluation Suite",
+  "description": "Pre-release evaluation definition for one QB version: scenarios, graders, metrics and the promotion gates per lifecycle stage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "id", "for", "scenarios", "graders", "metrics", "gates"],
+  "properties": {
+    "apiVersion": { "const": "qb.zeptly.dev/v1" },
+    "kind": { "const": "QBEvalSuite" },
+    "id": { "type": "string", "pattern": "^evalsuite:[a-z][a-z0-9-]*$" },
+    "for": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef" },
+    "datasets": {
+      "description": "Large fixtures live outside Git (Cortex); referenced by stable ID.",
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "version"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^dataset:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$" },
+          "version": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange" },
+          "split": { "enum": ["dev", "test", "holdout"] }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "description", "input", "graders"],
+        "properties": {
+          "id": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug" },
+          "description": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "input": { "description": "Must validate against the blueprint's contracts.input.schema.", "type": "object" },
+          "environment": { "description": "Simulated capability/Jev behaviours (mocks, fault injection).", "type": "object" },
+          "expectations": { "type": "array", "items": { "type": "string" } },
+          "graders": { "type": "array", "minItems": 1, "items": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug" } }
+        }
+      }
+    },
+    "graders": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "kind"],
+        "properties": {
+          "id": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug" },
+          "kind": { "enum": ["deterministic", "rubric", "system-one-judge", "human"] },
+          "description": { "type": "string" },
+          "rubric": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "unit", "aggregate"],
+        "properties": {
+          "id": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug" },
+          "unit": { "enum": ["ratio", "usd", "seconds", "count", "score"] },
+          "aggregate": { "enum": ["mean", "p50", "p95", "max", "sum", "rate"] },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "runs": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "repetitions": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "minScenarioCoverage": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "baseline": {
+      "description": "Version to beat or not regress against (normally provenance.parent).",
+      "type": "object", "additionalProperties": false, "required": ["ref", "tolerance"],
+      "properties": {
+        "ref": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef" },
+        "tolerance": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "gates": {
+      "description": "Thresholds that must be met by a passing eval-run evidence record before promotion INTO the named status.",
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "candidate": { "type": "array", "items": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison" } },
+        "canary": { "type": "array", "items": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison" } },
+        "stable": { "type": "array", "items": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison" } }
+      },
+      "required": ["canary", "stable"]
+    }
+  }
+}

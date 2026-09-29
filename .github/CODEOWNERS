@@ -1,0 +1,10 @@
+# Adjust team handles to the real Zeptly org structure.
+*                    @Zeptly/qb-maintainers
+/schemas/            @Zeptly/qb-maintainers @Zeptly/platform-architecture
+/scripts/            @Zeptly/qb-maintainers
+/.github/            @Zeptly/qb-maintainers @Zeptly/security
+/registries.yaml     @Zeptly/qb-maintainers @Zeptly/platform-architecture
+/SECURITY.md         @Zeptly/security
+/docs/security.md    @Zeptly/security
+# Any change to a QB definition needs its owner-team review via the PR; permission widening also needs security
+/qbs/                @Zeptly/qb-maintainers @Zeptly/security

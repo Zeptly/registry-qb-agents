@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:registry-index:v1",
+  "title": "QB Registry Index",
+  "description": "Generated, machine-consumable index (dist/index.json). The single resolution contract peers and runtimes use; filesystem layout is never part of the contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "registry", "commit", "entries"],
+  "properties": {
+    "apiVersion": { "const": "qb.zeptly.dev/v1" },
+    "kind": { "const": "RegistryIndex" },
+    "registry": { "const": "qb-agents" },
+    "commit": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "version", "status", "digest", "path", "dependencies", "compatibility"],
+        "properties": {
+          "id": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbId" },
+          "version": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver" },
+          "status": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycleStatus" },
+          "digest": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest" },
+          "path": { "type": "string" },
+          "sealed": { "type": "boolean" },
+          "dependencies": { "type": "array", "items": { "type": "object" } },
+          "compatibility": { "type": "object" },
+          "replacedBy": { "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef" }
+        }
+      }
+    }
+  }
+}

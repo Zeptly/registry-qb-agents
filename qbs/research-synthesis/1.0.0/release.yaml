@@ -1,0 +1,9 @@
+apiVersion: qb.zeptly.dev/v1
+kind: QBRelease
+id: qb:research-synthesis@1.0.0
+blueprintDigest: sha256:78056e47e0dbb0db2c1234b6d230ec47137f514e5020b3bbaede710c3c061651
+suiteDigest: sha256:20e4752e16addfcc8e3765eb027fac1747b4f3d921b6fd0ae3e532d4bb086edd
+sealedAt: 2026-09-29T11:45:51.768Z
+approvals:
+  - type: human
+    id: chris-marchant
