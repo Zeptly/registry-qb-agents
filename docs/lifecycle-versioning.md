@@ -8,7 +8,7 @@ Three **independent** fields:
 |---|---|---|
 | `metadata.maturity` | `candidate`, `canonical` | evaluation/promotion state of the version |
 | `metadata.lifecycle` | `active`, `deprecated`, `revoked` | operational state, an append-only overlay |
-| `metadata.origin.type` | `authored`, `evolved`, `imported` | how the version came to exist (`evolved` requires `evolution.sourceRefs`) |
+| `metadata.origin.type` | `native`, `evolved`, `upstream-seed` | how the version came to exist (`evolved` requires `evolution.sourceRefs`; finer distinctions such as `refined`/`discovered` go in `origin.evolution.kind`) |
 
 ## Maturity
 

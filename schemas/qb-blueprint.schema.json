@@ -67,9 +67,10 @@
               "properties": {
                 "kind": {
                   "enum": [
-                    "refined"
+                    "refined",
+                    "discovered"
                   ],
-                  "description": "Evolution kinds beyond `refined` are not yet defined."
+                  "description": "Finer distinction within origin.type: evolved. Other kinds are not yet defined."
                 },
                 "sourceRefs": {
                   "type": "array",

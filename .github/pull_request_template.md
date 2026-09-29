@@ -12,7 +12,7 @@
 - [ ] Docs only
 
 ## Origin
-- [ ] Authored
+- [ ] Native
 - [ ] Evolved (source refs listed)
 - [ ] Evolved via Wisdom of Compute (hypothesis, evidence refs, eval runs, human reviewer named)
 

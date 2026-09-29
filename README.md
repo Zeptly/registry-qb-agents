@@ -36,7 +36,7 @@ attestations: # digest-bound assessments (stale subjectDigest fails validation)
 ```
 
 `maturity` (`candidate | canonical`), `lifecycle` (`active | deprecated | revoked`) and `origin`
-(`authored | evolved | imported`) are independent fields.
+(`native | evolved | upstream-seed`) are independent fields.
 
 ## Layout
 

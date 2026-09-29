@@ -19,4 +19,4 @@ refs:
     capturedAt: 2026-09-27T00:00:00Z
     redaction: aggregate-only
     summary: SYNTHETIC EXAMPLE, not real execution evidence. Aggregate analysis of replanning outcomes across sampled 1.0.0 production sessions (the evidence behind the proposal).
-    subjectDigest: sha256:700dde80456c18aef7cb4ad4d664c66cffcbc1f888adde7809d457fdad35a721
+    subjectDigest: sha256:5d38c51d14acd505b7da9210f2cca1c7aa27049ff4da02b513f3b10ca0c78148

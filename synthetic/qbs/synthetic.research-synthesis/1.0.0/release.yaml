@@ -5,7 +5,7 @@ metadata:
   registry: qb-agents
   id: synthetic.research-synthesis
   version: 1.0.0
-digest: sha256:700dde80456c18aef7cb4ad4d664c66cffcbc1f888adde7809d457fdad35a721
+digest: sha256:5d38c51d14acd505b7da9210f2cca1c7aa27049ff4da02b513f3b10ca0c78148
 suiteDigest: sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3
 sealedAt: 2026-09-29T13:14:26.578Z
 approvals:

@@ -87,7 +87,7 @@ const cases = [
   ["synthetic attestation flag removed", CAND, (d) => { d.attestations[0].synthetic = false; }, "E_SYNTHETIC"],
   ["wisdom-of-compute without evidence", CAND, (d) => { d.provenance.transformations[0].evidenceRefs = []; }, "E_SCHEMA"],
   ["wisdom-of-compute without human review flag", CAND, (d) => { delete d.provenance.transformations[0].humanReviewRequired; }, "E_SCHEMA"],
-  ["wisdom-of-compute on non-evolved origin", CAND, (d) => { d.metadata.origin = { type: "authored" }; }, "E_ORIGIN"],
+  ["wisdom-of-compute on non-evolved origin", CAND, (d) => { d.metadata.origin = { type: "native" }; }, "E_ORIGIN"],
   ["evolved without source", CAND, (d) => { d.metadata.origin.evolution.sourceRefs = []; }, "E_SCHEMA"],
   ["parent missing", CAND, (d) => { d.metadata.origin.evolution.sourceRefs[0].version = "0.9.0"; d.provenance.sourceRefs[0].version = "0.9.0"; }, "E_PARENT"],
   ["parent digest mismatch", CAND, (d) => { d.metadata.origin.evolution.sourceRefs[0].digest = "sha256:" + "1".repeat(64); }, "E_DIGEST"],
@@ -142,7 +142,7 @@ test("canonical requires a release record; candidates must not have one", () => 
 
 test("maturity, lifecycle and origin vary independently", () => {
   const root = sandbox();
-  // deprecate the canonical (evolved-from-nothing, authored) version through the append-only overlay
+  // deprecate the canonical (native) version through the append-only overlay
   fs.writeFileSync(path.join(root, CANON, "lifecycle.yaml"), YAML.stringify({
     apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" },
     entries: [
@@ -152,9 +152,9 @@ test("maturity, lifecycle and origin vary independently", () => {
   }));
   mutate(root, bpOf(CANON), (d) => { d.metadata.lifecycle = "deprecated"; });
   const r = validateAll({ root });
-  assert.deepEqual(r.errors, []); // digest unaffected by lifecycle; maturity stays canonical; origin stays authored
+  assert.deepEqual(r.errors, []); // digest unaffected by lifecycle; maturity stays canonical; origin stays native
   const e = buildIndex(r.versions, "synthetic").entries.find((x) => x.version === "1.0.0");
-  assert.deepEqual([e.maturity, e.lifecycle, e.origin], ["canonical", "deprecated", "authored"]);
+  assert.deepEqual([e.maturity, e.lifecycle, e.origin], ["canonical", "deprecated", "native"]);
   assert.deepEqual(e.replacedBy, { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.1.0" });
 });
 test("lifecycle overlay rejects illegal transitions and non-active start", () => {
@@ -286,4 +286,25 @@ test("immutability: lifecycle overlay is append-only", () => {
 test("no invented personal identities remain", () => {
   const r = spawnSync("grep", ["-rIl", "chris-marchant", ".", "--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=test"], { cwd: PKG_ROOT, encoding: "utf8" });
   assert.equal(r.stdout.trim(), "");
+});
+
+test("origin.type follows the common taxonomy: native | evolved | upstream-seed", () => {
+  for (const old of ["authored", "imported"]) {
+    const root = sandbox();
+    mutate(root, bpOf(DRAFT), (d) => { d.metadata.origin = { type: old }; });
+    assert.ok(codes(validateAll({ root })).includes("E_SCHEMA"), `${old} must be rejected`);
+  }
+  const root = sandbox();
+  mutate(root, bpOf(DRAFT), (d) => { d.metadata.origin = { type: "upstream-seed" }; });
+  assert.deepEqual(validateAll({ root }).errors, []);
+  // finer distinctions live in evolution.kind, not origin.type
+  const r2 = sandbox();
+  mutate(r2, bpOf(CAND), (d) => { d.metadata.origin.evolution.kind = "discovered"; });
+  assert.ok(!codes(validateAll({ root: r2 })).includes("E_SCHEMA"));
+  const r3 = sandbox();
+  mutate(r3, bpOf(CAND), (d) => { d.metadata.origin = { type: "discovered" }; });
+  assert.ok(codes(validateAll({ root: r3 })).includes("E_SCHEMA"));
+  const idx = buildIndex(validateAll().versions, "synthetic");
+  assert.ok(idx.entries.every((e) => ["native", "evolved", "upstream-seed"].includes(e.origin)));
+  assert.deepEqual(idx.entries.map((e) => e.origin).sort(), ["evolved", "native", "native"]);
 });

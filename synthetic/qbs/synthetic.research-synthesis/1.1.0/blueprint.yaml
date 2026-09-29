@@ -19,7 +19,7 @@ metadata:
         - registry: qb-agents
           id: synthetic.research-synthesis
           version: 1.0.0
-          digest: sha256:700dde80456c18aef7cb4ad4d664c66cffcbc1f888adde7809d457fdad35a721
+          digest: sha256:5d38c51d14acd505b7da9210f2cca1c7aa27049ff4da02b513f3b10ca0c78148
   maturity: candidate
   lifecycle: active
   synthetic: true
@@ -424,7 +424,7 @@ provenance:
     - registry: qb-agents
       id: synthetic.research-synthesis
       version: 1.0.0
-      digest: sha256:700dde80456c18aef7cb4ad4d664c66cffcbc1f888adde7809d457fdad35a721
+      digest: sha256:5d38c51d14acd505b7da9210f2cca1c7aa27049ff4da02b513f3b10ca0c78148
   transformations:
     - kind: wisdom-of-compute
       description: Intermediate accept threshold 0.7 -> 0.75; maxReplans 3 -> 4. No permission, budget or contract changes.
@@ -444,7 +444,7 @@ security:
 attestations:
   - type: evaluation
     ref: evidence://synthetic-example/eval-runs/research-synthesis/1.1.0/candidate-1
-    subjectDigest: sha256:08196951462313cff2503970fa06e3f399771311afb85193bf9e6426ee79bfe1
+    subjectDigest: sha256:85b79d727b199049f983f814739bfda62dc395cc2800a93203b2ca13feb78161
     capturedAt: 2026-09-29T11:00:00Z
     synthetic: true
     gate: candidate

@@ -28,7 +28,7 @@ Evidence envelope and lineage ids; `ResolutionLock` shape; index entry shape.
 | Candidate mutability | candidates may change until promoted; attestations go stale on any change |
 | Digest | sha256 of key-sorted JSON minus `metadata.maturity`, `metadata.lifecycle`, `security.approvals`, `attestations` |
 | Seal point | promotion to `canonical` writes an immutable release record |
-| `origin.type` values / `evolution.kind` | `authored\|evolved\|imported` / `refined` only |
+| `evolution.kind` | `refined`, `discovered` (finer distinctions live here, never in `origin.type`); `origin.type` itself follows the common taxonomy `native\|evolved\|upstream-seed` |
 | Approval types | `security-review`, `release-approval` (human, digest-bound) |
 | Directory layout, sidecar files | `<scope>/<id>/<version>/{blueprint,release,lifecycle}.yaml`, `evals/`, `evidence/` |
 | Resolver policy | highest canonical, non-revoked satisfying version (candidates never selected) |

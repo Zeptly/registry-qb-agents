@@ -109,6 +109,6 @@
       "description": "Append-only overlay state, independent of maturity and origin.",
       "enum": ["active", "deprecated", "revoked"]
     },
-    "originType": { "enum": ["authored", "evolved", "imported"] }
+    "originType": { "enum": ["native", "evolved", "upstream-seed"] }
   }
 }
