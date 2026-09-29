@@ -23,15 +23,15 @@ Evidence envelope and lineage ids; `ResolutionLock` shape; index entry shape.
 
 | Choice | Value |
 |---|---|
-| Artifact id grammar | dot-separated lowercase slugs |
+| Artifact id grammar | shared lowercase dotted/hyphenated slugs, no registry/kind prefixes |
 | `maturity` values | `candidate`, `canonical` only |
 | Candidate mutability | candidates may change until promoted; attestations go stale on any change |
-| Digest | sha256 of key-sorted JSON minus `metadata.maturity`, `metadata.lifecycle`, `security.approvals`, `attestations` |
-| Seal point | promotion to `canonical` writes an immutable release record |
+| Digest | see [canonicalization.md](canonicalization.md): sha256 of canonical JSON (code-point key order, LF) minus `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `security.approvals`, `attestations`; separate directory seal over the canonical payload files |
+| Seal point | promotion to `canonical` writes an immutable release record (digest, payload, directory seal) |
 | `evolution.kind` | `refined`, `discovered` (finer distinctions live here, never in `origin.type`); `origin.type` itself follows the common taxonomy `native\|evolved\|upstream-seed` |
 | Approval types | `security-review`, `release-approval` (human, digest-bound) |
 | Directory layout, sidecar files | `<scope>/<id>/<version>/{blueprint,release,lifecycle}.yaml`, `evals/`, `evidence/` |
-| Resolver policy | highest canonical, non-revoked satisfying version (candidates never selected) |
+| Resolver policy | highest canonical, non-revoked satisfying version (candidates never selected); unresolved references are listed explicitly in the lock |
 
 ## Synthetic data warning
 Everything under `synthetic/` is fictional: QBs, identities (`example-*`), referenced ids (`synthetic.*`), capability

@@ -5,9 +5,14 @@ metadata:
   registry: qb-agents
   id: synthetic.research-synthesis
   version: 1.0.0
-digest: sha256:5d38c51d14acd505b7da9210f2cca1c7aa27049ff4da02b513f3b10ca0c78148
-suiteDigest: sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3
-sealedAt: 2026-09-29T13:14:26.578Z
+digest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+directorySeal: sha256:3582d779863dd5dbd8fd472e7011d4551444e57a21cc8af7be1e1a78fbf69afc
+payload:
+  - path: blueprint.yaml
+    digest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+  - path: evals/suite.yaml
+    digest: sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3
+sealedAt: 2026-09-29T19:47:26.161Z
 approvals:
   - type: security-review
     actor:

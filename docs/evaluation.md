@@ -17,4 +17,4 @@ Each version that carries an evaluation attestation, and every canonical version
 
 An `evaluation` attestation with `result: pass` must meet every comparison in `gates.<its gate>` (`E_GATE`). Promotion to
 `canonical` requires a passing `canonical`-gate attestation whose `subjectDigest` equals the current digest. Editing the
-suite after release changes `suiteDigest` and fails validation. Execution of evaluations belongs to the runtime/eval harness.
+suite after release changes the payload digest and the directory seal and fails validation (`E_SEAL`). Execution of evaluations belongs to the runtime/eval harness.

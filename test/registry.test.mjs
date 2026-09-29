@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import YAML from "yaml";
-import { validateAll, checkImmutability, schemaErrors, buildIndex, artifactDigest, buildResolutionLock, resolveRef, PKG_ROOT } from "../scripts/lib/core.mjs";
+import { validateAll, checkImmutability, schemaErrors, buildIndex, artifactDigest, suiteDigest, directorySeal, canonicalize, sha256, compareCodePoints, buildResolutionLock, resolveRef, parseYaml, MAX_FILE_BYTES, PKG_ROOT } from "../scripts/lib/core.mjs";
 
 const codes = (r) => r.errors.map((e) => e.code);
 const SYN = "synthetic/qbs/synthetic.";
@@ -193,7 +193,7 @@ test("peer index validation is structural and offline: unresolved / canonical-re
   assert.ok(errs.some((e) => e.code === "E_UNRESOLVED" && /document-analyst/.test(e.message)));
 });
 
-test("resolution lock: range -> exact version + digest; skips candidates and revoked; pin mismatch fails", () => {
+test("resolution lock: range -> exact version + digest; skips candidates and revoked; failures are explicit, never omitted", () => {
   const d = (n) => "sha256:" + String(n).repeat(64);
   const entries = [
     { registry: "skills", id: "synthetic.source-evaluation", version: "1.0.0", maturity: "canonical", lifecycle: "active", digest: d(1) },
@@ -203,12 +203,31 @@ test("resolution lock: range -> exact version + digest; skips candidates and rev
     { registry: "skills", id: "synthetic.source-evaluation", version: "2.0.0", maturity: "canonical", lifecycle: "active", digest: d(5) },
   ];
   const decl = { registry: "skills", id: "synthetic.source-evaluation", version: "^1.0.0", digest: null };
-  assert.deepEqual(resolveRef(decl, entries), { registry: "skills", id: "synthetic.source-evaluation", version: "1.2.0", digest: d(2) });
-  assert.equal(resolveRef({ ...decl, version: "^3.0.0" }, entries), null);
-  assert.throws(() => resolveRef({ ...decl, digest: d(9) }, entries), /pinned digest/);
-  const lock = buildResolutionLock({ registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0", digest: d(7) }, [decl], entries);
+  assert.deepEqual(resolveRef(decl, entries), { status: "resolved", resolved: { registry: "skills", id: "synthetic.source-evaluation", version: "1.2.0", digest: d(2) } });
+  assert.deepEqual(resolveRef({ ...decl, version: "^3.0.0" }, entries), { status: "unresolved", reason: "no-satisfying-version" });
+  assert.deepEqual(resolveRef({ ...decl, digest: d(9) }, entries), { status: "unresolved", reason: "digest-mismatch" });
+  assert.deepEqual(resolveRef({ ...decl, version: "nope" }, entries), { status: "unresolved", reason: "invalid-range" });
+  const root = { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0", digest: d(7) };
+  const lock = buildResolutionLock(root, [decl, { ...decl, id: "synthetic.missing" }, { registry: "tiny-agents", id: "synthetic.fact-checker", version: "^1.0.0" }], entries);
   assert.deepEqual(schemaErrors("lock", lock), []);
-  assert.throws(() => buildResolutionLock(lock.root, [{ ...decl, id: "synthetic.missing" }], entries), /cannot resolve/);
+  assert.equal(lock.complete, false);
+  assert.equal(lock.locks.length, 3, "every declared reference appears");
+  assert.deepEqual(lock.locks.map((l) => l.status), ["resolved", "unresolved", "unresolved"]);
+  assert.deepEqual(lock.locks.map((l) => l.reason), [undefined, "no-satisfying-version", "peer-index-unavailable"]);
+  assert.equal(buildResolutionLock(root, [decl], entries).complete, true);
+  // schema: resolved needs `resolved`, unresolved needs `reason`
+  assert.ok(schemaErrors("lock", { ...lock, locks: [{ declared: decl, status: "unresolved" }] }).length > 0);
+  assert.ok(schemaErrors("lock", { ...lock, locks: [{ declared: decl, status: "resolved" }] }).length > 0);
+});
+
+test("resolution lock with no peer index lists ALL foreign references as unresolved (peer-index-unavailable)", () => {
+  const r = validateAll();
+  const v = r.versions.find((x) => x.blueprint.metadata.id === "synthetic.research-synthesis" && x.blueprint.metadata.version === "1.0.0");
+  const lock = buildResolutionLock({ registry: "qb-agents", id: v.blueprint.metadata.id, version: "1.0.0", digest: v.digest }, v.blueprint.references, []);
+  assert.deepEqual(schemaErrors("lock", lock), []);
+  assert.equal(lock.locks.length, v.blueprint.references.length);
+  assert.ok(lock.locks.every((l) => l.status === "unresolved" && l.reason === "peer-index-unavailable"));
+  assert.equal(lock.complete, false);
 });
 
 test("evidence envelope (provisional) accepts a well-formed event incl. resolution.locked", () => {
@@ -222,16 +241,73 @@ test("evidence envelope (provisional) accepts a well-formed event incl. resoluti
   assert.ok(schemaErrors("envelope", { ...ev, sessionId: "bad" }).length > 0);
 });
 
-test("digest scope: ignores maturity, lifecycle, approvals and attestations only", () => {
+test("digest scope: excludes version, maturity, lifecycle, approvals, attestations; includes identity, spec, references, provenance, security", () => {
   const bp = YAML.parse(fs.readFileSync(path.join(PKG_ROOT, bpOf(CANON)), "utf8"));
   const d = artifactDigest(bp);
   const c = JSON.parse(JSON.stringify(bp));
-  c.metadata.maturity = "candidate"; c.metadata.lifecycle = "revoked"; c.security.approvals = []; c.attestations = [];
+  c.metadata.version = "9.9.9"; c.metadata.maturity = "candidate"; c.metadata.lifecycle = "revoked"; c.security.approvals = []; c.attestations = [];
   assert.equal(artifactDigest(c), d);
-  for (const f of [(x) => { x.metadata.version = "9.9.9"; }, (x) => { x.spec.budgets.perRun.maxCostUsd = 1; }, (x) => { x.references.pop(); }, (x) => { x.security.classification = "public"; }, (x) => { x.provenance.authors.push({ type: "human", id: "z" }); }]) {
-    const y = JSON.parse(JSON.stringify(bp)); f(y);
-    assert.notEqual(artifactDigest(y), d);
+  const changes = [
+    (x) => { x.kind = "Other"; }, (x) => { x.metadata.id = "synthetic.other"; }, (x) => { x.metadata.registry = "skills"; },
+    (x) => { x.metadata.origin = { type: "upstream-seed" }; }, (x) => { x.spec.budgets.perRun.maxCostUsd = 1; }, (x) => { x.references.pop(); },
+    (x) => { x.security.classification = "public"; }, (x) => { x.security.capabilities.pop(); }, (x) => { x.provenance.authors.push({ type: "human", id: "z" }); },
+  ];
+  for (const f of changes) { const y = JSON.parse(JSON.stringify(bp)); f(y); assert.notEqual(artifactDigest(y), d); }
+});
+
+test("directory seal binds registry, id and version over the canonical payload files (blueprint + suite) only", () => {
+  const dir = path.join(PKG_ROOT, CANON);
+  const bp = parseYaml(fs.readFileSync(path.join(dir, "blueprint.yaml"), "utf8")), su = parseYaml(fs.readFileSync(path.join(dir, "evals/suite.yaml"), "utf8"));
+  const { payload, seal } = directorySeal(bp, su);
+  assert.deepEqual(payload.map((p) => p.path), ["blueprint.yaml", "evals/suite.yaml"]);
+  const other = JSON.parse(JSON.stringify(bp)); other.metadata.version = "1.0.1";
+  assert.equal(artifactDigest(other), artifactDigest(bp), "same content, same artifact digest");
+  assert.notEqual(directorySeal(other, su).seal, seal, "but a different version seals differently");
+  const su2 = JSON.parse(JSON.stringify(su)); su2.gates.canonical[0].value = 0.1;
+  assert.notEqual(directorySeal(bp, su2).seal, seal);
+  const att = JSON.parse(JSON.stringify(bp)); att.attestations.push({ ...att.attestations[0], ref: "evidence://synthetic-example/x" }); att.security.approvals = [];
+  assert.equal(directorySeal(att, su).seal, seal, "attestations/approvals are not payload");
+});
+
+// ---- golden vectors (independent Python implementation of docs/canonicalization.md) ----
+test("golden vectors: canonical JSON", () => {
+  const vecs = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "test/golden/canonical-json.json"), "utf8"));
+  assert.ok(vecs.length >= 5);
+  for (const v of vecs) {
+    assert.equal(canonicalize(v.input), v.canonical, v.name);
+    assert.equal(sha256(v.canonical), v.sha256, v.name);
   }
+});
+test("golden vectors: artifact digest, suite digest and directory seal of the canonical fixture", () => {
+  const g = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "test/golden/digest-seal.json"), "utf8"));
+  const dir = path.join(PKG_ROOT, g.fixture);
+  const bp = parseYaml(fs.readFileSync(path.join(dir, "blueprint.yaml"), "utf8")), su = parseYaml(fs.readFileSync(path.join(dir, "evals/suite.yaml"), "utf8"));
+  assert.equal(artifactDigest(bp), g.artifactDigest);
+  assert.equal(suiteDigest(su), g.suiteDigest);
+  const s = directorySeal(bp, su);
+  assert.equal(s.seal, g.directorySeal);
+  assert.deepEqual(s.payload, g.payload);
+  const rel = parseYaml(fs.readFileSync(path.join(dir, "release.yaml"), "utf8"));
+  assert.equal(rel.digest, g.artifactDigest); assert.equal(rel.directorySeal, g.directorySeal);
+});
+test("canonicalization: key order is independent of insertion order; CRLF/LF/CR strings hash identically; non-JSON data throws", () => {
+  assert.equal(canonicalize({ b: 1, a: { d: 1, c: 2 } }), canonicalize({ a: { c: 2, d: 1 }, b: 1 }));
+  assert.equal(canonicalize({ t: "a\r\nb\rc" }), canonicalize({ t: "a\nb\nc" }));
+  assert.equal(canonicalize(-0), "0");
+  for (const bad of [NaN, Infinity, undefined, () => 1, 10n, Symbol("x")]) assert.throws(() => canonicalize({ x: bad }), TypeError);
+});
+test("comparator: explicit code-point order (astral > U+FFFF), deterministic, locale-independent", () => {
+  assert.equal(compareCodePoints("\uffff", "\u{10000}"), -1);
+  assert.ok("\u{10000}" < "\uffff", "sanity: default UTF-16 ordering is the opposite");
+  assert.equal(compareCodePoints("a", "a"), 0);
+  assert.equal(compareCodePoints("B", "a"), -1);
+  assert.equal(compareCodePoints("ab", "a"), 1);
+  assert.deepEqual(["b", "B", "a", "\u00e9", "\u{1F600}", "\uffff"].sort(compareCodePoints), ["B", "a", "b", "\u00e9", "\uffff", "\u{1F600}"]);
+});
+test("index order uses the code-point comparator then semver", () => {
+  const syn = buildIndex(validateAll().versions, "synthetic").entries.map((e) => `${e.id}@${e.version}`);
+  assert.deepEqual(syn, ["synthetic.incident-triage@0.1.0", "synthetic.research-synthesis@1.0.0", "synthetic.research-synthesis@1.1.0"]);
+  assert.equal(buildIndex(validateAll().versions, "synthetic").entries.find((e) => e.version === "1.0.0").directorySeal, JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "test/golden/digest-seal.json"), "utf8")).directorySeal);
 });
 
 // ---- immutability (real git) ----
@@ -307,4 +383,139 @@ test("origin.type follows the common taxonomy: native | evolved | upstream-seed"
   const idx = buildIndex(validateAll().versions, "synthetic");
   assert.ok(idx.entries.every((e) => ["native", "evolved", "upstream-seed"].includes(e.origin)));
   assert.deepEqual(idx.entries.map((e) => e.origin).sort(), ["evolved", "native", "native"]);
+});
+
+// ---- final normalization: evolution kind, ID grammar, seal, safe loading ----
+test("evolution kind lives only at metadata.origin.evolution.kind", () => {
+  const root = sandbox();
+  mutate(root, bpOf(CAND), (d) => { d.provenance.evolution = { kind: "refined" }; });
+  assert.ok(codes(validateAll({ root })).includes("E_SCHEMA"));
+  const r2 = sandbox();
+  mutate(r2, bpOf(CAND), (d) => { d.metadata.origin.evolution.kind = "rewritten"; });
+  assert.ok(codes(validateAll({ root: r2 })).includes("E_SCHEMA"));
+  const bpSchema = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "schemas/qb-blueprint.schema.json"), "utf8"));
+  assert.ok(!("evolution" in bpSchema.properties.provenance.properties));
+});
+
+test("ID grammar: lowercase dotted/hyphenated slugs, no registry/kind prefixes", () => {
+  const ok = ["research.web-fact-check", "source-evaluation", "synthetic.a1.b-2", "a"];
+  const bad = ["Upper", "qb:x", "skill:x", "a..b", ".a", "a.", "a_b", "1abc", "-a", "a-", "x".repeat(97)];
+  const pattern = new RegExp(JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "schemas/common.schema.json"), "utf8")).$defs.artifactId.pattern);
+  for (const id of ok) assert.ok(pattern.test(id), id);
+  for (const id of bad.slice(0, -1)) assert.ok(!pattern.test(id), id);
+  for (const prefixed of ["qb.thing", "skills.thing", "execution-agent.thing", "synthetic.tiny-agents.thing"]) {
+    const root = sandbox();
+    mutate(root, bpOf(DRAFT), (d) => { d.references[0].id = prefixed; d.spec.delegation.executionAgents.allow[0] = prefixed; });
+    assert.ok(codes(validateAll({ root })).includes("E_ID_PREFIX"), prefixed);
+  }
+  const root = sandbox();
+  mutate(root, bpOf(DRAFT), (d) => { d.metadata.id = "qb.incident-triage"; });
+  assert.ok(codes(validateAll({ root })).includes("E_ID_PREFIX"));
+});
+
+test("release seal: payload edits and tampered seal are rejected; release record shape is enforced", () => {
+  let root = sandbox();
+  mutate(root, `${CANON}/evals/suite.yaml`, (d) => { d.gates.canonical[0].value = 0.1; });
+  assert.ok(codes(validateAll({ root })).includes("E_SEAL"));
+  root = sandbox();
+  mutate(root, `${CANON}/release.yaml`, (d) => { d.directorySeal = "sha256:" + "3".repeat(64); });
+  assert.ok(codes(validateAll({ root })).includes("E_SEAL"));
+  root = sandbox();
+  mutate(root, `${CANON}/release.yaml`, (d) => { d.payload = d.payload.slice(1); });
+  assert.ok(codes(validateAll({ root })).includes("E_SEAL"));
+  root = sandbox();
+  mutate(root, `${CANON}/release.yaml`, (d) => { delete d.directorySeal; });
+  assert.ok(codes(validateAll({ root })).includes("E_SCHEMA"));
+});
+
+test("filename allow-list, scope-root and id-level strays", () => {
+  let root = sandbox();
+  fs.writeFileSync(path.join(root, DRAFT, "notes.md"), "x\n");
+  assert.ok(codes(validateAll({ root })).includes("E_UNEXPECTED_FILE"));
+  root = sandbox();
+  fs.writeFileSync(path.join(root, "qbs/stray.yaml"), "a: 1\n");
+  assert.ok(codes(validateAll({ root })).includes("E_UNEXPECTED_FILE"));
+  root = sandbox();
+  fs.writeFileSync(path.join(root, "synthetic/qbs/synthetic.incident-triage/stray.yaml"), "a: 1\n");
+  assert.ok(codes(validateAll({ root })).includes("E_UNEXPECTED_FILE"));
+  root = sandbox();
+  fs.writeFileSync(path.join(root, "qbs/README.md"), "ok\n"); // the one allowed scope-root file
+  assert.deepEqual(validateAll({ root }).errors, []);
+});
+
+test("size limits: per-file and per-version", () => {
+  let root = sandbox();
+  fs.appendFileSync(path.join(root, bpOf(DRAFT)), "# " + "x".repeat(MAX_FILE_BYTES) + "\n");
+  assert.ok(codes(validateAll({ root })).includes("E_SIZE"));
+  root = sandbox();
+  for (const f of ["evals/suite.yaml", "evidence/refs.yaml", "lifecycle.yaml", "release.yaml"]) { fs.mkdirSync(path.dirname(path.join(root, DRAFT, f)), { recursive: true }); fs.writeFileSync(path.join(root, DRAFT, f), "# " + "y".repeat(MAX_FILE_BYTES - 100) + "\n"); }
+  const r = validateAll({ root });
+  assert.ok(r.errors.some((e) => e.code === "E_SIZE" && /version directory/.test(e.message)));
+});
+
+test("symlinks are never followed and are rejected (files, directories, scope entries, repo-wide)", () => {
+  let root = sandbox();
+  fs.symlinkSync("/etc/hostname", path.join(root, DRAFT, "release.yaml"));
+  let r = validateAll({ root });
+  assert.ok(r.errors.some((e) => e.code === "E_SYMLINK" && /release\.yaml/.test(e.file)));
+  root = sandbox();
+  fs.rmSync(path.join(root, DRAFT, "blueprint.yaml"));
+  fs.symlinkSync(path.join(PKG_ROOT, bpOf(CAND)), path.join(root, DRAFT, "blueprint.yaml"));
+  r = validateAll({ root });
+  assert.ok(codes(r).includes("E_SYMLINK") && codes(r).includes("E_MISSING") === false);
+  root = sandbox();
+  fs.symlinkSync(path.join(root, CAND), path.join(root, DRAFT, "evals"));
+  assert.ok(validateAll({ root }).errors.some((e) => e.code === "E_SYMLINK" && /evals/.test(e.file)));
+  root = sandbox();
+  fs.symlinkSync(path.join(root, "synthetic/qbs/synthetic.incident-triage"), path.join(root, "qbs/synthetic.alias"));
+  assert.ok(codes(validateAll({ root })).includes("E_SYMLINK"));
+  root = sandbox();
+  fs.symlinkSync(path.join(root, "synthetic"), path.join(root, "elsewhere"));
+  assert.ok(codes(validateAll({ root })).includes("E_SYMLINK"));
+});
+
+test("encoding and line-ending policy: CR, NUL, BOM, invalid UTF-8", () => {
+  const cases = [
+    ["E_LINE_ENDING", (b) => Buffer.from(b.toString("utf8").replace(/\n/g, "\r\n"))],
+    ["E_BINARY", (b) => Buffer.concat([b, Buffer.from([0])])],
+    ["E_ENCODING", (b) => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), b])],
+    ["E_ENCODING", (b) => Buffer.concat([b, Buffer.from([0xff, 0xfe, 0x0a])])],
+  ];
+  for (const [code, fn] of cases) {
+    const root = sandbox(), f = path.join(root, bpOf(DRAFT));
+    fs.writeFileSync(f, fn(fs.readFileSync(f)));
+    assert.ok(codes(validateAll({ root })).includes(code), code);
+  }
+});
+
+test("tape / trace / transcript detection by name, directory and content", () => {
+  const names = ["run.jsonl", "events.ndjson", "x.tape", "capture.har", "a.trace", "chat.transcript", "session-1.json", "my_trace.yaml", "transcript.md"];
+  for (const n of names) {
+    const root = sandbox();
+    fs.writeFileSync(path.join(root, DRAFT, n), "{}\n");
+    assert.ok(codes(validateAll({ root })).some((c) => c === "E_RUNTIME_ARTIFACT" || c === "E_UNEXPECTED_FILE"), n);
+    assert.ok(codes(validateAll({ root })).includes("E_UNEXPECTED_FILE"), n);
+  }
+  for (const d of ["tapes", "trajectories", "sessions", "traces", "transcripts"]) {
+    const root = sandbox();
+    fs.mkdirSync(path.join(root, "qbs", d), { recursive: true });
+    assert.ok(codes(validateAll({ root })).includes("E_RUNTIME_ARTIFACT"), d);
+  }
+  // extension check is repo-wide, even outside registry scopes
+  const root = sandbox();
+  fs.mkdirSync(path.join(root, "docs")); fs.writeFileSync(path.join(root, "docs/x.transcript"), "hi\n");
+  assert.ok(codes(validateAll({ root })).includes("E_RUNTIME_ARTIFACT"));
+  // content inside an allowed filename
+  let r2 = sandbox();
+  mutate(r2, `${CAND}/evidence/refs.yaml`, (d) => { d.refs[0].extra = 1; });
+  const payloads = [
+    { sessionId: "qbs_x", runId: "qbr_x" },
+    { events: [{ seq: 0, ts: "t" }, { seq: 1, ts: "t" }] },
+    { messages: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }] },
+  ];
+  for (const p of payloads) {
+    r2 = sandbox();
+    mutate(r2, bpOf(DRAFT), (d) => { d.spec.extensions = p; });
+    assert.ok(codes(validateAll({ root: r2 })).includes("E_RUNTIME_ARTIFACT"), JSON.stringify(p).slice(0, 30));
+  }
 });

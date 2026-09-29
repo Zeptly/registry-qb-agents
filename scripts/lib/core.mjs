@@ -17,29 +17,78 @@ export const SYNTHETIC_ID_PREFIX = "synthetic.";
 export const SYN_STORE = "evidence://synthetic-example/";
 export const LIFECYCLE_TRANSITIONS = { active: ["deprecated", "revoked"], deprecated: ["revoked"], revoked: [] };
 export const ALLOWED_FILES = new Set(["blueprint.yaml", "release.yaml", "lifecycle.yaml", "evals/suite.yaml", "evidence/refs.yaml"]);
+export const SCOPE_ROOT_FILES = new Set(["README.md"]);
+export const MAX_FILE_BYTES = 256 * 1024;
+export const MAX_VERSION_BYTES = 1024 * 1024;
+/** First id segment must not be a registry/kind word: the `registry` field carries that, ids stay prefix-free. */
+export const RESERVED_ID_PREFIXES = new Set(["skills", "skill", "tiny-agents", "tiny-agent", "tiny", "execution-agents", "execution-agent", "execution", "qb-agents", "qb-agent", "qb", "registry"]);
 const CLASSIFICATION_ORDER = ["public", "internal", "confidential", "restricted"];
 
 // ---------- helpers ----------
-export function canonicalize(v) {
-  if (Array.isArray(v)) return `[${v.map(canonicalize).join(",")}]`;
-  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(v[k])}`).join(",")}}`;
-  return JSON.stringify(v);
+/**
+ * Deterministic code-point comparator (no locale, no UTF-16 code-unit ordering). Compares Unicode scalar values, which is
+ * also the byte order of UTF-8.
+ */
+export function compareCodePoints(a, b) {
+  const x = Array.from(a), y = Array.from(b), n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) {
+    const d = x[i].codePointAt(0) - y[i].codePointAt(0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
 }
-export const sha256 = (s) => "sha256:" + crypto.createHash("sha256").update(s).digest("hex");
+const toLF = (s) => s.replace(/\r\n?/g, "\n");
 
 /**
- * Artifact digest: sha256 of canonical JSON of the artifact EXCLUDING the overlay/assessment fields that legitimately
- * change after content is fixed: metadata.maturity, metadata.lifecycle, security.approvals and attestations.
- * Attestations and approvals bind to this digest, so they cannot be inside it.
+ * Canonical JSON (see docs/canonicalization.md): UTF-8, no insignificant whitespace, object keys sorted by code point,
+ * array order preserved, numbers via ECMAScript Number-to-String (finite only), string values and keys normalised to LF line
+ * endings. Anything that is not JSON data (undefined, functions, NaN, Infinity, bigint, symbols) throws.
+ */
+export function canonicalize(v) {
+  if (v === null) return "null";
+  switch (typeof v) {
+    case "string": return JSON.stringify(toLF(v));
+    case "boolean": return v ? "true" : "false";
+    case "number":
+      if (!Number.isFinite(v)) throw new TypeError("canonical JSON: non-finite number");
+      return JSON.stringify(v);
+    case "object":
+      if (Array.isArray(v)) return `[${v.map(canonicalize).join(",")}]`;
+    { const keys = Object.keys(v).map((k) => [toLF(k), k]).sort((x, y) => compareCodePoints(x[0], y[0]));
+      for (let i = 1; i < keys.length; i++) if (keys[i][0] === keys[i - 1][0]) throw new TypeError("canonical JSON: duplicate key after line-ending normalisation");
+      return `{${keys.map(([nk, k]) => `${JSON.stringify(nk)}:${canonicalize(v[k])}`).join(",")}}`; }
+    default: throw new TypeError(`canonical JSON: unsupported type ${typeof v}`);
+  }
+}
+export const sha256 = (s) => "sha256:" + crypto.createHash("sha256").update(s, "utf8").digest("hex");
+
+/**
+ * Artifact digest: sha256 of canonical JSON of the artifact EXCLUDING metadata.version, metadata.maturity, metadata.lifecycle,
+ * security.approvals and attestations. Included: kind/apiVersion, identity (metadata.id/registry/origin/...), spec,
+ * references, provenance and security classification/capabilities. Attestations and approvals bind to this digest, so they
+ * cannot be inside it; the version is bound by the directory seal and the index entry instead.
  */
 export function artifactDigest(bp) {
   const c = JSON.parse(JSON.stringify(bp));
-  if (c.metadata) { delete c.metadata.maturity; delete c.metadata.lifecycle; }
+  if (c.metadata) { delete c.metadata.version; delete c.metadata.maturity; delete c.metadata.lifecycle; }
   if (c.security) delete c.security.approvals;
   delete c.attestations;
   return sha256(canonicalize(c));
 }
 export const suiteDigest = (suite) => sha256(canonicalize(suite));
+
+/**
+ * Directory seal over the canonical PAYLOAD files (blueprint.yaml via the artifact digest, evals/suite.yaml via its canonical
+ * digest). Sidecars that legitimately change after release (release.yaml, lifecycle.yaml, evidence/refs.yaml) are not payload.
+ * The seal binds registry, id and version, so identical content under two versions seals differently.
+ */
+export function directorySeal(bp, suite) {
+  const payload = [{ path: "blueprint.yaml", digest: artifactDigest(bp) }];
+  if (suite) payload.push({ path: "evals/suite.yaml", digest: suiteDigest(suite) });
+  payload.sort((a, b) => compareCodePoints(a.path, b.path));
+  const seal = sha256(canonicalize({ registry: bp.metadata.registry, id: bp.metadata.id, version: bp.metadata.version, payload }));
+  return { payload, seal };
+}
 
 export const parseYaml = (text) => YAML.parse(text, { schema: "core", uniqueKeys: true });
 const readYaml = (file) => parseYaml(fs.readFileSync(file, "utf8"));
@@ -72,36 +121,74 @@ export function schemaErrors(kind, data) {
   return validate.errors.map((e) => `${e.instancePath || "/"} ${e.message}${e.params?.additionalProperty ? ` (${e.params.additionalProperty})` : ""}`);
 }
 
-// ---------- loading ----------
+// ---------- loading (allow-listed, size-limited, symlink-safe) ----------
+const isRuntimePayload = (node) => {
+  if (Array.isArray(node)) {
+    if (node.length >= 2 && node.every((x) => x && typeof x === "object" && typeof x.role === "string" && "content" in x)) return "chat-transcript-shaped array (role/content messages)";
+    for (const x of node) { const r = isRuntimePayload(x); if (r) return r; }
+  } else if (node && typeof node === "object") {
+    if ("sessionId" in node && ("runId" in node || "eventId" in node || "branchId" in node)) return "evidence-envelope/tape-shaped object (sessionId + runId/eventId)";
+    if (Array.isArray(node.events) && node.events.length >= 2 && node.events.every((e) => e && typeof e === "object" && "seq" in e && "ts" in e)) return "event tape (events with seq/ts)";
+    for (const v of Object.values(node)) { const r = isRuntimePayload(v); if (r) return r; }
+  }
+  return null;
+};
+
 export function loadRegistry(root) {
   const versions = [];
+  versions.structureErrors = [];
+  const se = (code, file, message) => versions.structureErrors.push({ code, file, message });
   for (const [scope, sub] of Object.entries(SCOPES)) {
     const base = path.join(root, sub);
     if (!fs.existsSync(base)) continue;
-    for (const idDir of fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory())) {
-      for (const ver of fs.readdirSync(path.join(base, idDir.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+    for (const idDir of fs.readdirSync(base, { withFileTypes: true })) {
+      const idRel = `${sub}/${idDir.name}`;
+      if (idDir.isSymbolicLink()) { se("E_SYMLINK", idRel, "symbolic links are not allowed"); continue; }
+      if (!idDir.isDirectory()) { if (!SCOPE_ROOT_FILES.has(idDir.name)) se("E_UNEXPECTED_FILE", idRel, "only README.md may sit directly in a scope root"); continue; }
+      for (const ver of fs.readdirSync(path.join(base, idDir.name), { withFileTypes: true })) {
+        const vRel = `${idRel}/${ver.name}`;
+        if (ver.isSymbolicLink()) { se("E_SYMLINK", vRel, "symbolic links are not allowed"); continue; }
+        if (!ver.isDirectory()) { se("E_UNEXPECTED_FILE", vRel, "only version directories may sit under an artifact id directory"); continue; }
         const dir = path.join(base, idDir.name, ver.name);
-        const rel = path.relative(root, dir).split(path.sep).join("/");
-        const entry = { scope, dirId: idDir.name, dirVersion: ver.name, dir, rel, errors: [], warnings: [] };
+        const entry = { scope, dirId: idDir.name, dirVersion: ver.name, dir, rel: vRel, errors: [], warnings: [], symlinks: [], files: [], bytes: 0 };
+        walkVersion(dir, "", entry);
         const load = (name) => {
-          const f = path.join(dir, name);
-          if (!fs.existsSync(f)) return undefined;
-          try { return readYaml(f); } catch (e) { entry.errors.push({ code: "E_YAML", file: `${rel}/${name}`, message: e.message }); return null; }
+          if (!entry.files.includes(name)) return undefined;
+          const f = path.join(dir, name), st = fs.lstatSync(f), ferr = (code, message) => entry.errors.push({ code, file: `${vRel}/${name}`, message });
+          if (st.isSymbolicLink() || !st.isFile()) return null; // already reported by walkVersion
+          if (st.size > MAX_FILE_BYTES) { ferr("E_SIZE", `file is ${st.size} bytes; the limit is ${MAX_FILE_BYTES}`); return null; }
+          const buf = fs.readFileSync(f);
+          if (buf.includes(0)) { ferr("E_BINARY", "binary content (NUL byte) is not allowed"); return null; }
+          const text = buf.toString("utf8");
+          if (!Buffer.from(text, "utf8").equals(buf) || text.charCodeAt(0) === 0xfeff) { ferr("E_ENCODING", "file must be UTF-8 without BOM"); return null; }
+          if (text.includes("\r")) ferr("E_LINE_ENDING", "CR characters are not allowed; registry files use LF line endings");
+          try {
+            const doc = parseYaml(text);
+            const why = isRuntimePayload(doc);
+            if (why) { ferr("E_RUNTIME_ARTIFACT", `content looks like a runtime artifact: ${why}. Raw tapes, traces and transcripts must stay in the evidence store`); return null; }
+            return doc;
+          } catch (e) { ferr("E_YAML", e.message); return null; }
         };
         entry.blueprint = load("blueprint.yaml");
         entry.suite = load("evals/suite.yaml");
         entry.refs = load("evidence/refs.yaml");
         entry.release = load("release.yaml");
         entry.overlay = load("lifecycle.yaml");
-        entry.files = listFiles(dir);
         versions.push(entry);
       }
     }
   }
   return versions;
 }
-function listFiles(dir, prefix = "") {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? listFiles(path.join(dir, d.name), `${prefix}${d.name}/`) : [`${prefix}${d.name}`]));
+/** lstat-based walk: never follows symlinks; records files, symlinks and total bytes. */
+function walkVersion(dir, prefix, entry) {
+  for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rel = `${prefix}${d.name}`;
+    if (d.isSymbolicLink()) { entry.symlinks.push(rel); continue; }
+    if (d.isDirectory()) { walkVersion(path.join(dir, d.name), `${rel}/`, entry); continue; }
+    entry.files.push(rel);
+    if (d.isFile()) entry.bytes += fs.lstatSync(path.join(dir, d.name)).size;
+  }
 }
 
 // ---------- literal lint ----------
@@ -131,9 +218,11 @@ export function validateVersion(v, ctx) {
   const warn = (code, where, message, f = "blueprint.yaml") => warnings.push({ code, file: file(f), where, message });
 
   // repository hygiene: no runtime tapes / unexpected artifacts
-  for (const f of v.files) if (!ALLOWED_FILES.has(f)) err("E_UNEXPECTED_FILE", "", `${f} is not a registry artifact file. Raw tapes, trajectories and runtime payloads must stay in the evidence store, never in Git`, f);
+  for (const f of v.files) if (!ALLOWED_FILES.has(f)) err("E_UNEXPECTED_FILE", "", `${f} is not on the filename allow-list (${[...ALLOWED_FILES].join(", ")}). Raw tapes, traces, transcripts and runtime payloads must stay in the evidence store, never in Git`, f);
+  for (const f of v.symlinks) err("E_SYMLINK", "", "symbolic links are not allowed in registry artifacts", f);
+  if (v.bytes > MAX_VERSION_BYTES) err("E_SIZE", "", `version directory is ${v.bytes} bytes; the limit is ${MAX_VERSION_BYTES}`, ".");
 
-  if (bp === undefined) return err("E_MISSING", "", "blueprint.yaml is missing");
+  if (bp === undefined) { if (!v.symlinks.includes("blueprint.yaml")) err("E_MISSING", "", "blueprint.yaml is missing"); return; }
   if (bp === null) return;
   for (const m of schemaErrors("blueprint", bp)) err("E_SCHEMA", "", m);
   if (errors.some((e) => e.code === "E_SCHEMA")) return;
@@ -145,6 +234,8 @@ export function validateVersion(v, ctx) {
   // directory / scope identity
   if (id !== v.dirId) err("E_PATH", "/metadata/id", `directory ${v.dirId} does not match metadata.id ${id}`);
   if (md.version !== v.dirVersion) err("E_PATH", "/metadata/version", `directory ${v.dirVersion} does not match metadata.version ${md.version}`);
+  const idHead = (x) => x.split(".").filter((seg) => seg !== "synthetic")[0];
+  if (RESERVED_ID_PREFIXES.has(idHead(id))) err("E_ID_PREFIX", "/metadata/id", `ids must not start with a registry/kind word ("${idHead(id)}"); the registry field carries that`);
   const isSynthetic = md.synthetic === true;
   if (isSynthetic !== (v.scope === "synthetic")) err("E_SYNTHETIC", "/metadata/synthetic", v.scope === "synthetic" ? "artifacts under synthetic/ must set metadata.synthetic: true" : "synthetic artifacts may only live under synthetic/qbs/, never in the production namespace");
   if (isSynthetic !== id.startsWith(SYNTHETIC_ID_PREFIX)) err("E_SYNTHETIC", "/metadata/id", `synthetic artifacts must use the "${SYNTHETIC_ID_PREFIX}" id namespace and production artifacts must not`);
@@ -158,6 +249,7 @@ export function validateVersion(v, ctx) {
     if (refs.has(refKey(r))) err("E_REF_DUP", `/references/${i}`, `duplicate reference ${refKey(r)}`);
     refs.set(refKey(r), r);
     if (!semver.validRange(r.version)) err("E_RANGE", `/references/${i}/version`, `invalid semver range "${r.version}"`);
+    if (RESERVED_ID_PREFIXES.has(idHead(r.id))) err("E_ID_PREFIX", `/references/${i}/id`, `ids must not start with a registry/kind word ("${idHead(r.id)}")`);
     if (!ctx.registries.has(r.registry)) err("E_REGISTRY", `/references/${i}/registry`, `registry "${r.registry}" is not declared in registries.yaml`);
     if (r.registry === REGISTRY && r.id === id) err("E_REF_SELF", `/references/${i}`, "an artifact cannot reference itself");
     if (r.registry === REGISTRY) err("E_NESTED_QB", `/references/${i}`, "nested QB execution is disabled; qb-agents references are not allowed as execution dependencies");
@@ -339,7 +431,11 @@ export function validateVersion(v, ctx) {
       for (const m of schemaErrors("release", v.release)) err("E_SCHEMA", "", m, "release.yaml");
       if (v.release.metadata?.id !== id || v.release.metadata?.version !== md.version) err("E_RELEASE", "/metadata", "release record identity mismatch", "release.yaml");
       if (v.release.digest !== digest) err("E_DIGEST", "/digest", `artifact changed after release (release ${v.release.digest}, computed ${digest})`, "release.yaml");
-      if (v.suite && v.release.suiteDigest !== suiteDigest(v.suite)) err("E_DIGEST", "/suiteDigest", "evaluation suite changed after release", "release.yaml");
+      const { payload, seal } = directorySeal(bp, v.suite);
+      v.directorySeal = seal;
+      for (const p of payload) { const rp = v.release.payload?.find((x) => x.path === p.path); if (!rp || rp.digest !== p.digest) err("E_SEAL", `/payload/${p.path}`, `payload file ${p.path} changed after release`, "release.yaml"); }
+      if (v.release.payload && v.release.payload.length !== payload.length) err("E_SEAL", "/payload", "release payload file list differs from the canonical payload files", "release.yaml");
+      if (v.release.directorySeal !== seal) err("E_SEAL", "/directorySeal", `directory seal mismatch (release ${v.release.directorySeal}, computed ${seal})`, "release.yaml");
     }
     if (!v.suite) err("E_SUITE", "", "canonical versions require evals/suite.yaml", "evals/suite.yaml");
     if (!bp.attestations.some((a) => a.type === "evaluation" && a.gate === "canonical" && a.result === "pass" && a.subjectDigest === digest)) err("E_PROMOTION", "/attestations", "canonical requires a passing evaluation attestation for gate `canonical` bound to the current digest");
@@ -424,17 +520,25 @@ export function loadPeerIndexes(files = []) {
   return files.flatMap((f) => { const idx = JSON.parse(fs.readFileSync(f, "utf8")); return idx.entries ?? idx; });
 }
 
-const RUNTIME_ARTIFACT_RE = /\.(jsonl|ndjson|tape|har)$/i;
-const RUNTIME_DIR_RE = /^(tapes?|trajector(y|ies)|sessions|traces)$/i;
-/** Repo-wide scan: raw runtime artifacts must never be committed. */
+const RUNTIME_ARTIFACT_RE = /\.(jsonl|ndjson|tapes?|har|traces?|transcripts?)$/i;
+const RUNTIME_DIR_RE = /^(tapes?|trajector(y|ies)|sessions|traces?|transcripts?)$/i;
+const RUNTIME_NAME_TOKEN_RE = /(^|[._-])(tapes?|traces?|transcripts?|trajector(y|ies)|sessions?)([._-]|$)/i;
+/** Repo-wide scan: raw runtime artifacts must never be committed; symlinks are never followed. */
 export function scanRuntimeArtifacts(root) {
   const out = [];
   const walk = (dir) => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       if ([".git", "node_modules", "dist"].includes(d.name)) continue;
       const p = path.join(dir, d.name), rel = path.relative(root, p).split(path.sep).join("/");
-      if (d.isDirectory()) { if (RUNTIME_DIR_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trajectory directories must not be committed" }); walk(p); }
-      else if (RUNTIME_ARTIFACT_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trace files must not be committed; keep them in the evidence store" });
+      const inPayload = Object.values(SCOPES).some((sub) => rel === sub || rel.startsWith(sub + "/"));
+      if (d.isSymbolicLink()) { out.push({ code: "E_SYMLINK", file: rel, message: "symbolic links are not allowed in this repository" }); continue; }
+      if (d.isDirectory()) {
+        if (RUNTIME_DIR_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trajectory/trace/transcript directories must not be committed" });
+        else if (inPayload && RUNTIME_NAME_TOKEN_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "directory name looks like runtime evidence" });
+        walk(p);
+      } else if (RUNTIME_ARTIFACT_RE.test(d.name) || (inPayload && RUNTIME_NAME_TOKEN_RE.test(d.name))) {
+        out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trace/transcript files must not be committed; keep them in the evidence store" });
+      }
     }
   };
   walk(root);
@@ -453,8 +557,10 @@ export function validateAll({ root = PKG_ROOT, peerIndexFiles = [] } = {}) {
     if (seen.has(key)) v.errors.push({ code: "E_DUP", file: `${v.rel}/blueprint.yaml`, where: "", message: `duplicate ${key} also at ${seen.get(key)}` });
     seen.set(key, v.rel);
   }
-  const repoErrors = scanRuntimeArtifacts(root);
-  return { versions: all, errors: [...all.flatMap((v) => v.errors), ...repoErrors], warnings: all.flatMap((v) => v.warnings) };
+  const repoErrors = [...(all.structureErrors ?? []), ...scanRuntimeArtifacts(root)];
+  const seenErr = new Set();
+  const errors = [...all.flatMap((v) => v.errors), ...repoErrors].filter((e) => { const k = `${e.code}|${e.file}|${e.where ?? ""}|${e.message}`; if (seenErr.has(k)) return false; seenErr.add(k); return true; });
+  return { versions: all, errors, warnings: all.flatMap((v) => v.warnings) };
 }
 
 /** Deterministic derived index: a pure function of registry content (no timestamps, no commit ids). */
@@ -465,31 +571,37 @@ export function buildIndex(all, scope) {
       registry: REGISTRY, id: md.id, version: md.version, digest: v.digest, maturity: md.maturity, lifecycle: md.lifecycle,
       origin: md.origin.type, location: v.rel, synthetic: md.synthetic === true, sealed: md.maturity === "canonical",
       references: bp.references, compatibility: bp.spec.compatibility,
+      ...(v.directorySeal ? { directorySeal: v.directorySeal } : {}),
       ...(v.overlay?.entries?.at(-1)?.replacedBy ? { replacedBy: v.overlay.entries.at(-1).replacedBy } : {}),
     };
-  }).sort((a, b) => a.id.localeCompare(b.id) || semver.compare(a.version, b.version));
+  }).sort((a, b) => compareCodePoints(a.id, b.id) || semver.compare(a.version, b.version));
   return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "RegistryIndex", registry: REGISTRY, scope, entries };
 }
 
 // ---------- resolution (declared range -> exact version -> digest -> lock) ----------
-/** Resolve one declared reference against index entries. Never picks candidates or revoked versions. */
+/**
+ * Resolve one declared reference against index entries. Never throws for unresolvable references: the result is explicit.
+ * Only canonical, non-revoked versions are selectable; candidates never are. Reasons: peer-index-unavailable (no entries at all
+ * for that registry), invalid-range, no-satisfying-version, digest-mismatch.
+ */
 export function resolveRef(ref, entries) {
   const range = semver.validRange(ref.version);
-  if (!range) throw new Error(`invalid range ${ref.version}`);
+  if (!range) return { status: "unresolved", reason: "invalid-range" };
+  if (!entries.some((e) => e.registry === ref.registry)) return { status: "unresolved", reason: "peer-index-unavailable" };
   const c = entries.filter((e) => e.registry === ref.registry && e.id === ref.id && e.maturity === "canonical" && e.lifecycle !== "revoked" && semver.satisfies(e.version, range));
-  if (!c.length) return null;
+  if (!c.length) return { status: "unresolved", reason: "no-satisfying-version" };
   c.sort((a, b) => semver.rcompare(a.version, b.version));
   const hit = c[0];
-  if (ref.digest && ref.digest !== hit.digest) throw new Error(`pinned digest for ${ref.registry}/${ref.id} does not match ${hit.version}`);
-  return { registry: hit.registry, id: hit.id, version: hit.version, digest: hit.digest };
+  if (ref.digest && ref.digest !== hit.digest) return { status: "unresolved", reason: "digest-mismatch" };
+  return { status: "resolved", resolved: { registry: hit.registry, id: hit.id, version: hit.version, digest: hit.digest } };
 }
+/** Every declared reference appears in the lock, in declaration order; unresolved ones are explicit, never omitted. */
 export function buildResolutionLock(root, references, entries) {
-  const locks = references.map((declared) => {
-    const resolved = resolveRef(declared, entries);
-    if (!resolved) throw new Error(`cannot resolve ${declared.registry}/${declared.id}@${declared.version}`);
-    return { declared: { registry: declared.registry, id: declared.id, version: declared.version, ...(declared.digest ? { digest: declared.digest } : {}) }, resolved };
+  const locks = references.map((r) => {
+    const declared = { registry: r.registry, id: r.id, version: r.version, ...(r.digest ? { digest: r.digest } : {}) };
+    return { declared, ...resolveRef(r, entries) };
   });
-  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "ResolutionLock", root, locks };
+  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "ResolutionLock", root, complete: locks.every((l) => l.status === "resolved"), locks };
 }
 
 // ---------- immutability (git-diff based) ----------

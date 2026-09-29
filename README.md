@@ -49,7 +49,7 @@ synthetic/qbs/synthetic.<n>/<version>/   isolated synthetic examples
    evals/suite.yaml              evaluation suite + gates (candidate, canonical)
    evidence/refs.yaml            append-only POINTERS to supporting evidence (never raw data)
    lifecycle.yaml                append-only lifecycle overlay (optional until state changes)
-   release.yaml                  release record written at promotion to canonical
+   release.yaml                  release record (digest + directory seal) written at promotion to canonical
 registries.yaml                allow-list of registry names for structured references
 scripts/                       validate, seal, build-index, resolve, check-immutability
 test/                          tests; docs/ specs; .github/ CI, CODEOWNERS, PR template
@@ -62,7 +62,7 @@ npm ci
 npm run validate               # schema + semantic + provenance + security + synthetic-isolation + runtime-artifact scan
 npm test
 npm run build:index:verify     # dist/index.json (production) + dist/synthetic-index.json; built twice and compared
-npm run resolve -- <id>@<version> --scope synthetic --index <peer-index.json>   # offline ResolutionLock
+npm run resolve -- <id>@<version> --scope synthetic --index <peer-index.json>   # offline ResolutionLock (unresolved refs listed; exit 3 if incomplete)
 npm run seal -- <id>@<version> [--scope synthetic] [--pr <ref>]                 # release record for canonical
 npm run check:immutability -- --base origin/main
 ```
@@ -72,6 +72,7 @@ npm run check:immutability -- --base origin/main
 | | |
 |---|---|
 | [Protocol conformance](docs/protocol-conformance.md) | Protocol rule → implementation map |
+| [Canonicalization](docs/canonicalization.md) | Canonical JSON, digest scope, directory seal, LF policy |
 | [Architecture](docs/architecture.md) | Boundaries, layout, lineage |
 | [Blueprint spec](docs/blueprint-spec.md) | Envelope and `spec` sections |
 | [Lifecycle, maturity & versioning](docs/lifecycle-versioning.md) | Maturity, lifecycle overlay, sealing, semver |

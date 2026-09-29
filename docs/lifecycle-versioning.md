@@ -14,7 +14,7 @@ Three **independent** fields:
 
 * **candidate**: a registry object (not just a branch). May change until promoted. Attestations, if present, must bind
   the *current* digest, so any edit after assessment fails validation (`E_ATTESTATION_STALE`).
-* **canonical**: sealed and immutable. Requires a release record (`npm run seal`), a passing `canonical`-gate evaluation
+* **canonical**: sealed and immutable. Requires a release record with digest and directory seal (`npm run seal`), a passing `canonical`-gate evaluation
   attestation meeting `evals/suite.yaml` thresholds, a human `security-review` and a human `release-approval` bound to the
   digest, and provenance with ≥1 human author.
 * A candidate for an existing identity must have a version **greater than every canonical version** of that id.
@@ -29,12 +29,13 @@ Append-only history; first entry `active`; allowed transitions `active → depre
 `revoked` is terminal. `metadata.lifecycle` must equal the last entry (or `active` when there is no overlay). Lifecycle
 never changes the digest. Resolution (see [references](cross-registry-references.md)) never selects `revoked` versions.
 
-## Digest
+## Digest and directory seal
 
-`digest = sha256(canonical JSON of the artifact minus metadata.maturity, metadata.lifecycle, security.approvals, attestations)`.
-Those four are excluded because they change after content is fixed and (for the last two) bind *to* the digest. The
-release record stores `digest` and `suiteDigest`; the index stores `digest`. Digest canonicalisation is a QB-registry choice
-pending reconciliation.
+`digest = sha256(canonical JSON of the artifact minus metadata.version, metadata.maturity, metadata.lifecycle, security.approvals,
+attestations)`. Included: identity, `spec`, `references`, `provenance`, security classification/capabilities. A separate **directory
+seal** over the canonical payload files (`blueprint.yaml` via its digest, `evals/suite.yaml`) binds registry, id and version and is
+written to the release record. Canonical JSON, the code-point comparator and the LF policy are defined in
+[canonicalization.md](canonicalization.md).
 
 ## Semantic versioning
 

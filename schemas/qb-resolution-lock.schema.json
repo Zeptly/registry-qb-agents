@@ -2,13 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:resolution-lock:v1",
   "title": "Resolution Lock",
-  "description": "declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence. A lock is recorded by the runtime in evidence; this schema defines its shape. No network access is needed to validate it.",
+  "description": "declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence. EVERY declared reference appears in `locks`: resolved ones carry the exact version and digest, unresolved ones carry an explicit reason (never silently omitted). `complete` is true only when all are resolved; an incomplete lock must not be treated as a runnable lock. No network access is needed to validate it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
     "root",
+    "complete",
     "locks"
   ],
   "properties": {
@@ -42,6 +43,9 @@
         }
       }
     },
+    "complete": {
+      "type": "boolean"
+    },
     "locks": {
       "type": "array",
       "items": {
@@ -49,11 +53,17 @@
         "additionalProperties": false,
         "required": [
           "declared",
-          "resolved"
+          "status"
         ],
         "properties": {
           "declared": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved"
+            ]
           },
           "resolved": {
             "type": "object",
@@ -78,8 +88,56 @@
                 "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
               }
             }
+          },
+          "reason": {
+            "enum": [
+              "peer-index-unavailable",
+              "no-satisfying-version",
+              "digest-mismatch",
+              "invalid-range"
+            ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "resolved"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "resolved"
+              ],
+              "not": {
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unresolved"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "reason"
+              ],
+              "not": {
+                "required": [
+                  "resolved"
+                ]
+              }
+            }
+          }
+        ]
       }
     }
   }

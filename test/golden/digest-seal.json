@@ -1,0 +1,17 @@
+{
+  "comment": "Golden vectors computed with an independent (Python) implementation of docs/canonicalization.md. Editing the fixture requires regenerating these deliberately.",
+  "fixture": "synthetic/qbs/synthetic.research-synthesis/1.0.0",
+  "artifactDigest": "sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c",
+  "suiteDigest": "sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3",
+  "directorySeal": "sha256:3582d779863dd5dbd8fd472e7011d4551444e57a21cc8af7be1e1a78fbf69afc",
+  "payload": [
+    {
+      "path": "blueprint.yaml",
+      "digest": "sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c"
+    },
+    {
+      "path": "evals/suite.yaml",
+      "digest": "sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3"
+    }
+  ]
+}

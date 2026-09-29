@@ -90,6 +90,10 @@
           },
           "replacedBy": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
+          },
+          "directorySeal": {
+            "description": "Present for canonical entries: the release record's directory seal.",
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
           }
         }
       }
