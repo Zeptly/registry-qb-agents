@@ -1,0 +1,74 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # immutability check needs the base branch history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Schema + semantic validation
+        run: npm run validate -- --warnings-as-errors
+      - name: Unit tests
+        run: npm test
+      - name: Sealed versions are immutable (PRs)
+        if: github.event_name == 'pull_request'
+        run: npm run check:immutability -- --base "origin/${{ github.base_ref }}"
+      - name: Build registry index
+        run: npm run build:index
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry-index
+          path: dist/index.json
+          if-no-files-found: error
+
+  # Surfaces permission/budget widening so reviewers (CODEOWNERS: security) cannot miss it.
+  widening-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - name: Report permission widening
+        run: |
+          node scripts/validate.mjs --json > report.json || true
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("report.json","utf8"));
+            const w = r.warnings.filter(x => x.code === "W_PERMISSION_WIDENING");
+            for (const x of w) console.log(`::warning file=${x.file}::${x.message}`);
+            if (w.length) require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, "## Permission widening detected\n" + w.map(x => `- \`${x.file}\`: ${x.message}`).join("\n") + "\n\nSecurity review is required (see docs/security.md).\n");
+          '
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject credential-shaped strings anywhere in the repo
+        run: |
+          if grep -rIEn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=test \
+            -e 'sk-[A-Za-z0-9_-]{20,}' -e 'AKIA[0-9A-Z]{16}' -e 'gh[pousr]_[A-Za-z0-9]{30,}' \
+            -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' .; then
+            echo "::error::credential-shaped string found"; exit 1
+          fi

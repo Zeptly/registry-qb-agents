@@ -1,0 +1,10 @@
+# SYNTHETIC EXAMPLE DATA. NOT A REAL RELEASE. Placeholder approvers; no real promotion occurred.
+apiVersion: qb.zeptly.dev/v1
+kind: QBRelease
+id: qb:research-synthesis@1.0.0
+blueprintDigest: sha256:399a7579b63b7ecc3444b4a3b5a3ade88c2aba4b898b1f4096288ce3220df062
+suiteDigest: sha256:7213110a43074aad9baa477b1c15b3f516def9c31f370e20e9cbe3e5b5814f98
+sealedAt: 2026-09-29T12:24:19.278Z
+approvals:
+  - type: human
+    id: example-human-reviewer

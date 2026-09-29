@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:common:v1",
+  "title": "Zeptly QB registry: shared definitions",
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "semverRange": {
+      "description": "npm-style semver range (^1.2.0, ~1.2, >=1.0.0 <2.0.0, 1.2.3). Grammar is verified semantically by the validator.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Common release/digest protocol."
+    },
+    "duration": {
+      "description": "Compact duration: 30s, 15m, 2h, 7d.",
+      "type": "string",
+      "pattern": "^[1-9]\\d*(s|m|h|d)$"
+    },
+    "id": {
+      "description": "Stable, repository-independent identifier: <kind>:<slug>[/<slug>...]",
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(qb|execution-agent|tiny-agent|skill|capability|gateway|dataset|evalsuite):[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)*$",
+      "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Cross-registry identifier syntax."
+    },
+    "qbId": {
+      "type": "string",
+      "pattern": "^qb:[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 68
+    },
+    "pinnedRef": {
+      "description": "Exact-version reference: <id>@<semver>. Used wherever a specific artifact is meant (provenance, evidence).",
+      "type": "string",
+      "pattern": "^(qb|execution-agent|tiny-agent|skill|capability|gateway|dataset|evalsuite):[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)*@(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "qbPinnedRef": {
+      "type": "string",
+      "pattern": "^qb:[a-z][a-z0-9]*(-[a-z0-9]+)*@(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "evidenceUri": {
+      "description": "Opaque pointer into an evidence store: evidence://<store>/<path>. Never a URL, never a filesystem path.",
+      "type": "string",
+      "pattern": "^evidence://[a-z][a-z0-9-]*/[A-Za-z0-9._~/-]+$",
+      "maxLength": 256
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "human",
+            "automation"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "op",
+        "value"
+      ],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/slug"
+        },
+        "op": {
+          "enum": [
+            ">=",
+            ">",
+            "<=",
+            "<",
+            "=="
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    },
+    "riskLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "lifecycleStatus": {
+      "enum": [
+        "draft",
+        "candidate",
+        "canary",
+        "stable",
+        "deprecated",
+        "retired"
+      ],
+      "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Lifecycle terminology."
+    }
+  },
+  "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Applies to the ID/reference syntax (id, pinnedRef, qbPinnedRef, semverRange), the lifecycle status terms, the digest format and evidenceUri."
+}

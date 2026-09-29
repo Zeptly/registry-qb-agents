@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../../../../schemas/qb-evidence-refs.schema.json
+# =====================================================================
+# SYNTHETIC EXAMPLE DATA. NOT REAL EXECUTION EVIDENCE.
+# Every identity, URI, dataset, metric and dependency ID in this file is
+# fictional and exists only to exercise the registry tooling.
+# =====================================================================
+apiVersion: qb.zeptly.dev/v1
+kind: QBEvidenceRefs
+for: qb:research-synthesis@1.1.0
+refs:
+  - id: replan-analysis-wk39
+    type: trajectory-set
+    uri: evidence://synthetic-example/trajectory-sets/research-synthesis/1.0.0/2026-09-wk39-replan-analysis
+    synthetic: true
+    capturedAt: "2026-09-27T00:00:00Z"
+    blueprintDigest: sha256:399a7579b63b7ecc3444b4a3b5a3ade88c2aba4b898b1f4096288ce3220df062
+    redaction: aggregate-only
+    summary: "SYNTHETIC EXAMPLE, not real execution evidence. Aggregate analysis of replanning outcomes across sampled 1.0.0 production sessions (the evidence behind the proposal)."
+  - id: candidate-gate-run-1
+    type: eval-run
+    uri: evidence://synthetic-example/eval-runs/research-synthesis/1.1.0/candidate-1
+    synthetic: true
+    capturedAt: "2026-09-29T11:00:00Z"
+    blueprintDigest: sha256:f3b6035501322446881bfd447d1a7c4679493efaab3174348cf25b8bf52dc279
+    gate: candidate
+    result: pass
+    metrics: { task-success-rate: 0.88, citation-coverage: 0.95, cost-p95: 11.0, latency-p95: 4200, replans-mean: 0.7 }
+    redaction: aggregate-only
+    summary: "SYNTHETIC EXAMPLE, not real execution evidence. Candidate-gate evaluation of 1.1.0 against the shipped suite, compared with the 1.0.0 baseline."

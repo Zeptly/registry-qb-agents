@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:release:v1",
+  "title": "QB Release Seal",
+  "description": "Written by `npm run seal` when a version first reaches `canary`. Pins content digests; from then on the version is immutable apart from lifecycle status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "id",
+    "blueprintDigest",
+    "suiteDigest",
+    "sealedAt"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "qb.zeptly.dev/v1"
+    },
+    "kind": {
+      "const": "QBRelease"
+    },
+    "id": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
+    },
+    "blueprintDigest": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+    },
+    "suiteDigest": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+    },
+    "sealedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "promotionPr": {
+      "type": "string",
+      "description": "Pull request reference that promoted the version, e.g. Zeptly/registry-qb-agents#12."
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/actor"
+      }
+    }
+  },
+  "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Common release/digest protocol is unresolved."
+}
