@@ -34,7 +34,7 @@ jobs:
         run: npm run check:immutability -- --base "origin/${{ github.base_ref }}"
       - name: Build registry index
         run: npm run build:index
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: registry-index
           path: dist/index.json
