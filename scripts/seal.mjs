@@ -1,24 +1,26 @@
 #!/usr/bin/env node
-// Usage: node scripts/seal.mjs qb:<slug>@<version> [--pr Zeptly/registry-qb-agents#N] [--approver user]
-// Writes release.yaml pinning blueprint + suite digests. Run in the PR that first moves a version to `canary`.
+// Usage: node scripts/seal.mjs <id>@<version> [--pr <transport-ref>] [--scope production|synthetic]
+// Writes release.yaml (digest + suite digest) for a version being promoted to `canonical`.
+// Promotion also requires editing blueprint metadata.maturity -> canonical, digest-bound attestations and approvals.
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import YAML from "yaml";
-import { PKG_ROOT, blueprintDigest, suiteDigest, parseYaml } from "./lib/core.mjs";
+import { PKG_ROOT, SCOPES, REGISTRY, artifactDigest, suiteDigest, parseYaml } from "./lib/core.mjs";
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { pr: { type: "string" }, approver: { type: "string", multiple: true } } });
-const m = /^qb:([a-z0-9-]+)@(.+)$/.exec(positionals[0] ?? "");
-if (!m) { console.error("usage: seal qb:<slug>@<version> [--pr ref] [--approver github-login]"); process.exit(2); }
-const dir = path.join(PKG_ROOT, "qbs", m[1], m[2]);
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { pr: { type: "string" }, scope: { type: "string", default: "production" } } });
+const m = /^([a-z0-9.-]+)@(.+)$/.exec(positionals[0] ?? "");
+if (!m || !SCOPES[values.scope]) { console.error("usage: seal <id>@<version> [--pr ref] [--scope production|synthetic]"); process.exit(2); }
+const dir = path.join(PKG_ROOT, SCOPES[values.scope], m[1], m[2]);
 const bp = parseYaml(fs.readFileSync(path.join(dir, "blueprint.yaml"), "utf8"));
 const suite = parseYaml(fs.readFileSync(path.join(dir, "evals/suite.yaml"), "utf8"));
+const approvals = (bp.security.approvals ?? []).filter((a) => a.subjectDigest === artifactDigest(bp)).map(({ type, actor, at }) => ({ type, actor, at }));
 const release = {
-  apiVersion: "qb.zeptly.dev/v1", kind: "QBRelease", id: `${bp.id}@${bp.version}`,
-  blueprintDigest: blueprintDigest(bp), suiteDigest: suiteDigest(suite), sealedAt: new Date().toISOString(),
-  ...(values.pr ? { promotionPr: values.pr } : {}),
-  ...(values.approver?.length ? { approvals: values.approver.map((id) => ({ type: "human", id })) } : {}),
+  apiVersion: "registry.zeptly.dev/v1alpha1", kind: "ReleaseRecord",
+  metadata: { registry: REGISTRY, id: bp.metadata.id, version: bp.metadata.version },
+  digest: artifactDigest(bp), suiteDigest: suiteDigest(suite), sealedAt: new Date().toISOString(),
+  ...(values.pr ? { promotionRef: values.pr } : {}), ...(approvals.length ? { approvals } : {}),
 };
-const banner = bp.metadata.labels?.example === "true" ? "# SYNTHETIC EXAMPLE DATA. NOT A REAL RELEASE. Placeholder approvers; no real promotion occurred.\n" : "";
+const banner = bp.metadata.synthetic ? "# SYNTHETIC EXAMPLE DATA. NOT A REAL RELEASE. Placeholder approvers; no real promotion occurred.\n" : "";
 fs.writeFileSync(path.join(dir, "release.yaml"), banner + YAML.stringify(release));
-console.log(`sealed ${release.id}\n  blueprint ${release.blueprintDigest}\n  suite     ${release.suiteDigest}`);
+console.log(`release record for ${bp.metadata.id}@${bp.metadata.version}\n  digest ${release.digest}\n  suite  ${release.suiteDigest}`);

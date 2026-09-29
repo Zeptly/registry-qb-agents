@@ -1,17 +1,12 @@
-# PROVISIONAL / NOT YET CANONICAL: pending cross-registry reconciliation.
-# Namespace ownership for `capability:`, `gateway:` and `dataset:` is UNRESOLVED (repo: null = no agreed owner).
-# Registry-of-registries map for stable ID kinds.
-# Purely informational for humans and for the validator's kind allow-list.
-# Artifacts are resolved by <id> + <semver range> through each registry's published
-# index (see docs/cross-registry-references.md), never by repository path.
-apiVersion: qb.zeptly.dev/v1
+# Zeptly Registry Protocol v0.1: registries covered by structured references {registry, id, version, digest?}.
+# This file is an allow-list for the `registry` field. It does not locate files (resolution is by id + version + digest).
+#
+# NOT registries (deferred by the protocol, ownership UNRESOLVED): capability / gateway / model namespaces.
+# Blueprints carry those as OPAQUE platform tokens (e.g. capability:..., gateway:...) that this repo does not interpret.
+apiVersion: registry.zeptly.dev/v1alpha1
 kind: RegistryMap
-kinds:
-  qb:              { registry: qb-agents,         repo: Zeptly/registry-qb-agents }
-  execution-agent: { registry: execution-agents,  repo: Zeptly/registry-execution-agents }
-  tiny-agent:      { registry: tiny-agents,       repo: Zeptly/registry-tiny-agents }
-  skill:           { registry: skills,            repo: Zeptly/registry-skills }
-  capability:      { registry: capabilities,      repo: null }   # provider/capability gateways; owner TBD
-  gateway:         { registry: gateway-contracts, repo: null }   # abstract service contracts (AI Gateway, Cortex, ...)
-  dataset:         { registry: evaluation-data,   repo: null }
-  evalsuite:       { registry: qb-agents,         repo: Zeptly/registry-qb-agents }
+registries:
+  skills:           { repo: Zeptly/registry-skills }
+  tiny-agents:      { repo: Zeptly/registry-tiny-agents }
+  execution-agents: { repo: Zeptly/registry-execution-agents }
+  qb-agents:        { repo: Zeptly/registry-qb-agents }

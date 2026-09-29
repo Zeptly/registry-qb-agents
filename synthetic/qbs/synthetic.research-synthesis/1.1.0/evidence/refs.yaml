@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../../../schemas/qb-evidence-refs.schema.json
+# =====================================================================
+# SYNTHETIC EXAMPLE DATA. NOT REAL EXECUTION EVIDENCE.
+# Every identity, URI, dataset, metric, capability token and referenced id in this
+# file is fictional and exists only to exercise the registry tooling. Referenced
+# ids use the synthetic. namespace and resolve nowhere.
+# =====================================================================
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: QBEvidenceRefs
+metadata:
+  registry: qb-agents
+  id: synthetic.research-synthesis
+  version: 1.1.0
+refs:
+  - id: replan-analysis-wk39
+    type: trajectory-set
+    uri: evidence://synthetic-example/trajectory-sets/research-synthesis/1.0.0/2026-09-wk39-replan-analysis
+    synthetic: true
+    capturedAt: 2026-09-27T00:00:00Z
+    redaction: aggregate-only
+    summary: SYNTHETIC EXAMPLE, not real execution evidence. Aggregate analysis of replanning outcomes across sampled 1.0.0 production sessions (the evidence behind the proposal).
+    subjectDigest: sha256:700dde80456c18aef7cb4ad4d664c66cffcbc1f888adde7809d457fdad35a721

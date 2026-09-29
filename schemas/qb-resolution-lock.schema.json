@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:resolution-lock:v1",
+  "title": "Resolution Lock",
+  "description": "declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence. A lock is recorded by the runtime in evidence; this schema defines its shape. No network access is needed to validate it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "root",
+    "locks"
+  ],
+  "properties": {
+    "apiVersion": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "ResolutionLock"
+    },
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/registryName"
+        },
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        },
+        "digest": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+        }
+      }
+    },
+    "locks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "declared",
+          "resolved"
+        ],
+        "properties": {
+          "declared": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
+          },
+          "resolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version",
+              "digest"
+            ],
+            "properties": {
+              "registry": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/registryName"
+              },
+              "id": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+              },
+              "version": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+              },
+              "digest": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

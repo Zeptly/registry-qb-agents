@@ -1,65 +1,123 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:blueprint:v1",
-  "title": "QB Blueprint",
-  "description": "Canonical declarative definition of one immutable version of a QB (Quarterback) orchestration agent. Pure data: no code, no endpoints, no secrets.",
+  "title": "QB Blueprint (Zeptly Registry Protocol v0.1 envelope)",
+  "$comment": "The common envelope follows the approved Zeptly Registry Protocol v0.1. Deferred by the protocol and NOT defined here: Evidence Protocol ownership/schema, capability/gateway/model namespace ownership, signing, peer-index distribution, workspace overrides, traffic channels, nested QB execution, runtime-trigger contract versioning.",
+  "description": "Canonical declarative definition of one version of a QB orchestration agent. Pure data: no code, endpoints or secrets.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
-    "id",
-    "version",
     "metadata",
-    "lifecycle",
-    "identity",
-    "purpose",
-    "contracts",
-    "orchestration",
-    "planning",
-    "decomposition",
-    "delegation",
-    "evaluation",
-    "replanning",
-    "jev",
-    "models",
-    "context",
-    "checkpointing",
-    "concurrency",
-    "swarm",
-    "budgets",
-    "capabilities",
-    "escalation",
-    "hitl",
-    "state",
-    "dependencies",
-    "evidence",
-    "governance",
+    "spec",
+    "references",
     "provenance",
-    "compatibility"
+    "security",
+    "attestations"
   ],
   "properties": {
     "apiVersion": {
-      "const": "qb.zeptly.dev/v1"
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
     },
     "kind": {
       "const": "QBBlueprint"
-    },
-    "id": {
-      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbId"
-    },
-    "version": {
-      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
     },
     "metadata": {
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "id",
+        "version",
+        "registry",
+        "origin",
+        "maturity",
+        "lifecycle",
         "name",
         "summary",
         "owners"
       ],
       "properties": {
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        },
+        "registry": {
+          "const": "qb-agents"
+        },
+        "origin": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/originType"
+            },
+            "evolution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "sourceRefs"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "refined"
+                  ],
+                  "description": "Evolution kinds beyond `refined` are not yet defined."
+                },
+                "sourceRefs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
+                  }
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "evolved"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "evolution"
+                ],
+                "properties": {
+                  "evolution": {
+                    "properties": {
+                      "sourceRefs": {
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    },
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "maturity": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/maturity"
+        },
+        "lifecycle": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycle"
+        },
+        "synthetic": {
+          "description": "true marks fabricated example data. Synthetic artifacts live only under synthetic/ and never enter production indexes.",
+          "type": "boolean"
+        },
         "name": {
           "type": "string",
           "minLength": 3,
@@ -112,1061 +170,775 @@
         }
       }
     },
-    "lifecycle": {
-      "description": "Mutable-by-promotion metadata. Excluded from the blueprint digest so status can advance without altering the sealed definition.",
+    "spec": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status"
+        "identity",
+        "purpose",
+        "contracts",
+        "orchestration",
+        "planning",
+        "decomposition",
+        "delegation",
+        "evaluation",
+        "replanning",
+        "jev",
+        "models",
+        "context",
+        "checkpointing",
+        "concurrency",
+        "swarm",
+        "budgets",
+        "capabilities",
+        "escalation",
+        "hitl",
+        "state",
+        "evidence",
+        "governance",
+        "compatibility"
       ],
       "properties": {
-        "status": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycleStatus"
-        },
-        "statusChangedAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "deprecation": {
+        "identity": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "reason"
+            "agentClass",
+            "role",
+            "instructions",
+            "boundaries"
           ],
           "properties": {
-            "reason": {
+            "agentClass": {
+              "description": "Fixed. QB is an orchestration agent class and is architecturally separate from Zep and from Timesavers.",
+              "const": "qb"
+            },
+            "role": {
               "type": "string",
-              "minLength": 5
+              "minLength": 10,
+              "maxLength": 300
             },
-            "replacedBy": {
-              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
-            },
-            "sunsetAfter": {
+            "persona": {
               "type": "string",
-              "format": "date"
-            }
-          }
-        }
-      }
-    },
-    "identity": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "agentClass",
-        "role",
-        "instructions",
-        "boundaries"
-      ],
-      "properties": {
-        "agentClass": {
-          "description": "Fixed. QB is an orchestration agent class and is architecturally separate from Zep and from Timesavers.",
-          "const": "qb"
-        },
-        "role": {
-          "type": "string",
-          "minLength": 10,
-          "maxLength": 300
-        },
-        "persona": {
-          "type": "string",
-          "maxLength": 500
-        },
-        "instructions": {
-          "description": "Canonical system-level operating instructions for the QB. Plain text; treated as data by the runtime.",
-          "type": "string",
-          "minLength": 20,
-          "maxLength": 20000
-        },
-        "boundaries": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 5
-          }
-        }
-      }
-    },
-    "purpose": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "goal",
-        "taskClasses"
-      ],
-      "properties": {
-        "goal": {
-          "type": "string",
-          "minLength": 10
-        },
-        "nonGoals": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "taskClasses": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "description",
-              "typicalComplexity"
-            ],
-            "properties": {
-              "id": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
-              },
-              "description": {
-                "type": "string"
-              },
-              "typicalComplexity": {
-                "enum": [
-                  "moderate",
-                  "high",
-                  "extreme"
-                ]
-              },
-              "risk": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
-              }
-            }
-          }
-        }
-      }
-    },
-    "contracts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "input",
-        "output"
-      ],
-      "properties": {
-        "input": {
-          "$ref": "#/$defs/ioContract"
-        },
-        "output": {
-          "$ref": "#/$defs/ioContract"
-        },
-        "progressEvents": {
-          "description": "Whether the QB emits structured progress events to the caller.",
-          "type": "boolean",
-          "default": true
-        },
-        "errors": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "code",
-              "retryable"
-            ],
-            "properties": {
-              "code": {
-                "type": "string",
-                "pattern": "^[A-Z][A-Z0-9_]+$"
-              },
-              "retryable": {
-                "type": "boolean"
-              },
-              "description": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    },
-    "orchestration": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "defaultStrategy",
-        "allowedStrategies",
-        "maxDepth",
-        "maxSteps",
-        "timeout"
-      ],
-      "properties": {
-        "defaultStrategy": {
-          "$ref": "#/$defs/strategy"
-        },
-        "allowedStrategies": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/strategy"
-          }
-        },
-        "maxDepth": {
-          "description": "Max nesting of delegation (QB -> agent -> sub-delegation).",
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 5
-        },
-        "maxSteps": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 10000
-        },
-        "timeout": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
-        },
-        "nestedQb": {
-          "description": "Nested QB execution is DISABLED and its design is unresolved (cycle detection, budget inheritance). The only permitted value is `forbidden`.",
-          "const": "forbidden"
-        }
-      }
-    },
-    "planning": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "approach",
-        "requirePlanArtifact",
-        "maxPlanRevisions",
-        "review"
-      ],
-      "properties": {
-        "approach": {
-          "enum": [
-            "plan-then-execute",
-            "iterative",
-            "hybrid"
-          ]
-        },
-        "requirePlanArtifact": {
-          "description": "Plan must be persisted as a versioned artifact in run state.",
-          "type": "boolean"
-        },
-        "maxPlanRevisions": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50
-        },
-        "review": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "selfCritique",
-            "humanApproval"
-          ],
-          "properties": {
-            "selfCritique": {
-              "type": "boolean"
+              "maxLength": 500
             },
-            "systemOneCritique": {
-              "description": "Ask Jev/System-1 to critique the plan.",
-              "type": "boolean"
+            "instructions": {
+              "description": "Canonical system-level operating instructions for the QB. Plain text; treated as data by the runtime.",
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 20000
             },
-            "humanApproval": {
-              "enum": [
-                "never",
-                "risk-based",
-                "always"
-              ]
-            }
-          }
-        }
-      }
-    },
-    "decomposition": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "strategy",
-        "maxSubtasks",
-        "dependencyModel"
-      ],
-      "properties": {
-        "strategy": {
-          "enum": [
-            "functional",
-            "by-source",
-            "by-question",
-            "hierarchical",
-            "adaptive"
-          ]
-        },
-        "maxSubtasks": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 500
-        },
-        "dependencyModel": {
-          "enum": [
-            "sequence",
-            "dag"
-          ]
-        },
-        "requireAcceptanceCriteria": {
-          "description": "Every subtask must carry explicit acceptance criteria.",
-          "type": "boolean",
-          "default": true
-        },
-        "guidance": {
-          "type": "string",
-          "maxLength": 4000
-        }
-      }
-    },
-    "delegation": {
-      "description": "Delegation targets are referenced by ID and MUST also appear in `dependencies`.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "executionAgents",
-        "tinyAgents",
-        "rules",
-        "fallback"
-      ],
-      "properties": {
-        "executionAgents": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "allow",
-            "selection"
-          ],
-          "properties": {
-            "allow": {
-              "$ref": "#/$defs/idList"
-            },
-            "selection": {
-              "enum": [
-                "capability-match",
-                "explicit-rules",
-                "system-one-routed"
-              ]
-            }
-          }
-        },
-        "tinyAgents": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "allowCompile",
-            "maxPerRun",
-            "maxLifetime"
-          ],
-          "properties": {
-            "allowCompile": {
-              "description": "May request ad-hoc Tiny Agent compilation from the Tiny Agent compiler.",
-              "type": "boolean"
-            },
-            "allowedTemplates": {
-              "$ref": "#/$defs/idList"
-            },
-            "allowedSkills": {
-              "$ref": "#/$defs/idList"
-            },
-            "maxPerRun": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 10000
-            },
-            "maxLifetime": {
-              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
-            }
-          }
-        },
-        "rules": {
-          "description": "Structured routing rules. Deliberately not an expression language: rules are data.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "match",
-              "action"
-            ],
-            "properties": {
-              "id": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
-              },
-              "match": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "tags": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "minRisk": {
-                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
-                  },
-                  "taskClass": {
-                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
-                  }
-                }
-              },
-              "action": {
-                "enum": [
-                  "handle-directly",
-                  "delegate-execution-agent",
-                  "compile-tiny-agent",
-                  "swarm",
-                  "escalate"
-                ]
-              },
-              "target": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/id"
-              },
-              "rationale": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "fallback": {
-          "enum": [
-            "handle-directly",
-            "compile-tiny-agent",
-            "escalate",
-            "fail"
-          ]
-        }
-      }
-    },
-    "evaluation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "intermediate",
-        "final",
-        "suite"
-      ],
-      "properties": {
-        "intermediate": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "enabled"
-          ],
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "evaluators": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/evaluator"
-              }
-            },
-            "acceptThreshold": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "onReject": {
-              "enum": [
-                "retry-subtask",
-                "replan",
-                "escalate"
-              ]
-            }
-          }
-        },
-        "final": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "evaluators",
-            "acceptThreshold"
-          ],
-          "properties": {
-            "evaluators": {
+            "boundaries": {
               "type": "array",
               "minItems": 1,
               "items": {
-                "$ref": "#/$defs/evaluator"
+                "type": "string",
+                "minLength": 5
               }
-            },
-            "acceptThreshold": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
             }
           }
         },
-        "suite": {
-          "description": "Pre-release evaluation suite shipped beside this blueprint.",
+        "purpose": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "path"
+            "goal",
+            "taskClasses"
           ],
           "properties": {
-            "path": {
-              "const": "evals/suite.yaml"
-            }
-          }
-        }
-      }
-    },
-    "replanning": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "triggers",
-        "maxReplans",
-        "onExhaustion",
-        "preserveCompletedWork"
-      ],
-      "properties": {
-        "triggers": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "subtask-failed",
-              "evaluation-rejected",
-              "new-information",
-              "budget-pressure",
-              "capability-unavailable",
-              "human-feedback",
-              "jev-recommendation"
-            ]
-          }
-        },
-        "maxReplans": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50
-        },
-        "onExhaustion": {
-          "enum": [
-            "escalate",
-            "fail",
-            "partial-result"
-          ]
-        },
-        "preserveCompletedWork": {
-          "type": "boolean"
-        },
-        "retry": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxAttemptsPerSubtask": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 10
-            },
-            "backoff": {
-              "enum": [
-                "none",
-                "linear",
-                "exponential"
-              ]
-            }
-          }
-        }
-      }
-    },
-    "jev": {
-      "description": "System-1 (Jev) policy. Jev is reached ONLY via an abstract authenticated AI Gateway contract; blueprints never carry endpoints, hosts, or credentials.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "gateway",
-        "operations",
-        "onUnavailable"
-      ],
-      "properties": {
-        "gateway": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "contract",
-            "version"
-          ],
-          "properties": {
-            "contract": {
-              "description": "Gateway contract ID, e.g. gateway:ai-gateway/jev.",
+            "goal": {
               "type": "string",
-              "pattern": "^gateway:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
+              "minLength": 10
             },
-            "version": {
-              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
-            }
-          }
-        },
-        "operations": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "op",
-              "mode"
-            ],
-            "properties": {
-              "op": {
-                "enum": [
-                  "classify-task",
-                  "assess-complexity",
-                  "plan-assist",
-                  "route",
-                  "critique",
-                  "evaluate",
-                  "summarise",
-                  "estimate-cost"
-                ]
-              },
-              "mode": {
-                "enum": [
-                  "required",
-                  "preferred",
-                  "optional",
-                  "disabled"
-                ]
+            "nonGoals": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "taskClasses": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "description",
+                  "typicalComplexity"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "typicalComplexity": {
+                    "enum": [
+                      "moderate",
+                      "high",
+                      "extreme"
+                    ]
+                  },
+                  "risk": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
+                  }
+                }
               }
             }
           }
         },
-        "onUnavailable": {
-          "description": "Behaviour when a `required` operation cannot be served.",
-          "enum": [
-            "halt",
-            "escalate",
-            "degrade-to-local-heuristics"
-          ]
-        },
-        "dataHandling": {
+        "contracts": {
           "type": "object",
           "additionalProperties": false,
+          "required": [
+            "input",
+            "output"
+          ],
           "properties": {
-            "maxClassification": {
+            "input": {
+              "$ref": "#/$defs/ioContract"
+            },
+            "output": {
+              "$ref": "#/$defs/ioContract"
+            },
+            "progressEvents": {
+              "description": "Whether the QB emits structured progress events to the caller.",
+              "type": "boolean",
+              "default": true
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]+$"
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "orchestration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "defaultStrategy",
+            "allowedStrategies",
+            "maxDepth",
+            "maxSteps",
+            "timeout"
+          ],
+          "properties": {
+            "defaultStrategy": {
+              "$ref": "#/$defs/strategy"
+            },
+            "allowedStrategies": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/strategy"
+              }
+            },
+            "maxDepth": {
+              "description": "Max nesting of delegation (QB -> agent -> sub-delegation).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "maxSteps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "timeout": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+            },
+            "nestedQb": {
+              "description": "Nested QB execution is DISABLED and its design is unresolved (cycle detection, budget inheritance). The only permitted value is `forbidden`.",
+              "const": "forbidden"
+            }
+          }
+        },
+        "planning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "approach",
+            "requirePlanArtifact",
+            "maxPlanRevisions",
+            "review"
+          ],
+          "properties": {
+            "approach": {
               "enum": [
-                "public",
-                "internal",
-                "confidential",
-                "restricted"
+                "plan-then-execute",
+                "iterative",
+                "hybrid"
               ]
             },
-            "redactBeforeCall": {
+            "requirePlanArtifact": {
+              "description": "Plan must be persisted as a versioned artifact in run state.",
               "type": "boolean"
-            }
-          }
-        }
-      }
-    },
-    "models": {
-      "description": "Model policy expressed as abstract tiers per role, resolved by the AI Gateway. Concrete model IDs are intentionally not part of canonical definitions.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "roles",
-        "resolution"
-      ],
-      "properties": {
-        "resolution": {
-          "enum": [
-            "gateway-routed"
-          ]
-        },
-        "roles": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "planner",
-            "synthesiser"
-          ],
-          "properties": {
-            "planner": {
-              "$ref": "#/$defs/modelRole"
             },
-            "decomposer": {
-              "$ref": "#/$defs/modelRole"
-            },
-            "evaluator": {
-              "$ref": "#/$defs/modelRole"
-            },
-            "synthesiser": {
-              "$ref": "#/$defs/modelRole"
-            },
-            "router": {
-              "$ref": "#/$defs/modelRole"
-            }
-          }
-        },
-        "diversity": {
-          "description": "Require evaluator role to differ from generating model family where the gateway can.",
-          "type": "boolean"
-        }
-      }
-    },
-    "context": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "maxWorkingTokens",
-        "compaction",
-        "handoff"
-      ],
-      "properties": {
-        "maxWorkingTokens": {
-          "type": "integer",
-          "minimum": 1000
-        },
-        "compaction": {
-          "enum": [
-            "summarise",
-            "sliding-window",
-            "retrieval",
-            "none"
-          ]
-        },
-        "memory": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "read": {
-              "type": "array",
-              "items": {
-                "enum": [
-                  "run-state",
-                  "workspace",
-                  "cortex"
-                ]
-              }
-            },
-            "write": {
-              "type": "array",
-              "items": {
-                "enum": [
-                  "run-state",
-                  "workspace",
-                  "cortex"
-                ]
-              }
-            }
-          }
-        },
-        "handoff": {
-          "description": "What may flow from the QB to delegated agents.",
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "maxContextTokens",
-            "minimiseByDefault"
-          ],
-          "properties": {
-            "maxContextTokens": {
+            "maxPlanRevisions": {
               "type": "integer",
-              "minimum": 100
+              "minimum": 0,
+              "maximum": 50
             },
-            "minimiseByDefault": {
-              "type": "boolean"
-            },
-            "redactClassifications": {
-              "type": "array",
-              "items": {
-                "enum": [
-                  "confidential",
-                  "restricted"
-                ]
+            "review": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "selfCritique",
+                "humanApproval"
+              ],
+              "properties": {
+                "selfCritique": {
+                  "type": "boolean"
+                },
+                "systemOneCritique": {
+                  "description": "Ask Jev/System-1 to critique the plan.",
+                  "type": "boolean"
+                },
+                "humanApproval": {
+                  "enum": [
+                    "never",
+                    "risk-based",
+                    "always"
+                  ]
+                }
               }
             }
           }
-        }
-      }
-    },
-    "checkpointing": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "granularity",
-        "triggers",
-        "retention",
-        "resume"
-      ],
-      "properties": {
-        "granularity": {
-          "enum": [
-            "step",
-            "subtask",
-            "phase"
-          ]
         },
-        "triggers": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "plan-created",
-              "plan-revised",
-              "subtask-completed",
-              "before-side-effect",
-              "before-hitl",
-              "swarm-join",
-              "budget-threshold"
-            ]
-          }
-        },
-        "retention": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
-        },
-        "resume": {
+        "decomposition": {
           "type": "object",
           "additionalProperties": false,
           "required": [
             "strategy",
-            "requireIdempotentSideEffects"
+            "maxSubtasks",
+            "dependencyModel"
           ],
           "properties": {
             "strategy": {
               "enum": [
-                "last-checkpoint",
-                "explicit-checkpoint",
-                "fork-branch"
+                "functional",
+                "by-source",
+                "by-question",
+                "hierarchical",
+                "adaptive"
               ]
             },
-            "requireIdempotentSideEffects": {
-              "type": "boolean"
-            }
-          }
-        },
-        "rollback": {
-          "description": "Rollback creates a new branch in the lineage; history is never rewritten.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "allowed": {
-              "type": "boolean"
+            "maxSubtasks": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
             },
-            "sideEffects": {
+            "dependencyModel": {
               "enum": [
-                "compensate",
-                "block",
-                "ignore"
+                "sequence",
+                "dag"
               ]
+            },
+            "requireAcceptanceCriteria": {
+              "description": "Every subtask must carry explicit acceptance criteria.",
+              "type": "boolean",
+              "default": true
+            },
+            "guidance": {
+              "type": "string",
+              "maxLength": 4000
             }
           }
-        }
-      }
-    },
-    "concurrency": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "maxParallelDelegations",
-        "maxParallelTinyAgents"
-      ],
-      "properties": {
-        "maxParallelDelegations": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 200
         },
-        "maxParallelTinyAgents": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1000
-        },
-        "perCapability": {
-          "type": "object",
-          "propertyNames": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/id"
-          },
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 1
-          }
-        }
-      }
-    },
-    "swarm": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "enabled"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "maxSize": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 1000
-        },
-        "patterns": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "map-reduce",
-              "fan-out-verify",
-              "debate",
-              "tournament"
-            ]
-          }
-        },
-        "aggregation": {
-          "enum": [
-            "synthesise",
-            "vote",
-            "best-of",
-            "merge-structured"
-          ]
-        },
-        "requiresHitlAbove": {
-          "description": "Swarm size above which human approval is required.",
-          "type": "integer",
-          "minimum": 1
-        },
-        "abortOnFailureRatio": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        }
-      },
-      "if": {
-        "properties": {
-          "enabled": {
-            "const": true
-          }
-        }
-      },
-      "then": {
-        "required": [
-          "maxSize",
-          "patterns",
-          "aggregation"
-        ]
-      }
-    },
-    "budgets": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "perRun",
-        "onExceed"
-      ],
-      "properties": {
-        "perRun": {
+        "delegation": {
+          "description": "Delegation targets are referenced by ID and MUST also appear in `dependencies`.",
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "maxCostUsd",
-            "maxWallClock"
+            "executionAgents",
+            "tinyAgents",
+            "rules",
+            "fallback"
           ],
           "properties": {
-            "maxCostUsd": {
-              "type": "number",
-              "exclusiveMinimum": 0
+            "executionAgents": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "allow",
+                "selection"
+              ],
+              "properties": {
+                "allow": {
+                  "description": "Execution Agent ids (registry `execution-agents`); each MUST appear in top-level `references`.",
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+                  }
+                },
+                "selection": {
+                  "enum": [
+                    "capability-match",
+                    "explicit-rules",
+                    "system-one-routed"
+                  ]
+                }
+              }
             },
-            "maxTokens": {
-              "type": "integer",
-              "minimum": 1
+            "tinyAgents": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "allowCompile",
+                "maxPerRun",
+                "maxLifetime"
+              ],
+              "properties": {
+                "allowCompile": {
+                  "description": "May request ad-hoc Tiny Agent compilation from the Tiny Agent compiler.",
+                  "type": "boolean"
+                },
+                "allowedTemplates": {
+                  "description": "Tiny Agent ids (registry `tiny-agents`); each MUST appear in `references`.",
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+                  }
+                },
+                "allowedSkills": {
+                  "description": "Skill ids (registry `skills`); each MUST appear in `references`.",
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+                  }
+                },
+                "maxPerRun": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                },
+                "maxLifetime": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+                }
+              }
             },
-            "maxWallClock": {
-              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+            "rules": {
+              "description": "Structured routing rules. Deliberately not an expression language: rules are data.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "match",
+                  "action"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+                  },
+                  "match": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "tags": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "minRisk": {
+                        "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
+                      },
+                      "taskClass": {
+                        "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+                      }
+                    }
+                  },
+                  "action": {
+                    "enum": [
+                      "handle-directly",
+                      "delegate-execution-agent",
+                      "compile-tiny-agent",
+                      "swarm",
+                      "escalate"
+                    ]
+                  },
+                  "target": {
+                    "description": "Registry-local id: an execution-agents id for delegate-execution-agent, a tiny-agents id for compile-tiny-agent.",
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+                  },
+                  "rationale": {
+                    "type": "string"
+                  }
+                }
+              }
             },
-            "maxToolCalls": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "maxDelegations": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "maxTinyAgents": {
-              "type": "integer",
-              "minimum": 0
+            "fallback": {
+              "enum": [
+                "handle-directly",
+                "compile-tiny-agent",
+                "escalate",
+                "fail"
+              ]
             }
           }
         },
-        "softLimitRatio": {
-          "description": "Fraction of a hard limit at which budget-pressure fires.",
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "exclusiveMaximum": 1
-        },
-        "onExceed": {
-          "enum": [
-            "halt",
-            "escalate",
-            "partial-result"
-          ]
-        },
-        "callerOverride": {
-          "description": "Whether callers may lower (never raise) budgets per run.",
-          "enum": [
-            "lower-only",
-            "none"
+        "evaluation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "intermediate",
+            "final",
+            "suite"
           ],
-          "default": "lower-only"
-        }
-      }
-    },
-    "capabilities": {
-      "description": "Least-privilege capability permissions. Default is deny; every allowed ID must appear in `dependencies`.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "default",
-        "allow"
-      ],
-      "properties": {
-        "default": {
-          "const": "deny"
-        },
-        "allow": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "scopes"
-            ],
-            "properties": {
-              "id": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/id"
-              },
-              "scopes": {
-                "type": "array",
-                "minItems": 1,
-                "uniqueItems": true,
-                "items": {
+          "properties": {
+            "intermediate": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "evaluators": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/evaluator"
+                  }
+                },
+                "acceptThreshold": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "onReject": {
                   "enum": [
-                    "read",
-                    "write",
-                    "execute",
-                    "external-send"
+                    "retry-subtask",
+                    "replan",
+                    "escalate"
                   ]
                 }
-              },
-              "requiresHitl": {
-                "type": "boolean"
-              },
-              "constraints": {
+              }
+            },
+            "final": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "evaluators",
+                "acceptThreshold"
+              ],
+              "properties": {
+                "evaluators": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/evaluator"
+                  }
+                },
+                "acceptThreshold": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "suite": {
+              "description": "Evaluation suite shipped beside this blueprint (evals/suite.yaml).",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "const": "evals/suite.yaml"
+                }
+              }
+            }
+          }
+        },
+        "replanning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "triggers",
+            "maxReplans",
+            "onExhaustion",
+            "preserveCompletedWork"
+          ],
+          "properties": {
+            "triggers": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "subtask-failed",
+                  "evaluation-rejected",
+                  "new-information",
+                  "budget-pressure",
+                  "capability-unavailable",
+                  "human-feedback",
+                  "jev-recommendation"
+                ]
+              }
+            },
+            "maxReplans": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 50
+            },
+            "onExhaustion": {
+              "enum": [
+                "escalate",
+                "fail",
+                "partial-result"
+              ]
+            },
+            "preserveCompletedWork": {
+              "type": "boolean"
+            },
+            "retry": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxAttemptsPerSubtask": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                "backoff": {
+                  "enum": [
+                    "none",
+                    "linear",
+                    "exponential"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "jev": {
+          "description": "System-1 (Jev) policy. Jev is reached ONLY via an abstract authenticated AI Gateway contract; blueprints never carry endpoints, hosts, or credentials.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gateway",
+            "operations",
+            "onUnavailable"
+          ],
+          "properties": {
+            "gateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract",
+                "version"
+              ],
+              "properties": {
+                "contract": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/gatewayId"
+                },
+                "version": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
+                }
+              }
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
                 "type": "object",
                 "additionalProperties": false,
+                "required": [
+                  "op",
+                  "mode"
+                ],
                 "properties": {
-                  "rateLimitPerRun": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "dataClassificationMax": {
+                  "op": {
                     "enum": [
-                      "public",
-                      "internal",
+                      "classify-task",
+                      "assess-complexity",
+                      "plan-assist",
+                      "route",
+                      "critique",
+                      "evaluate",
+                      "summarise",
+                      "estimate-cost"
+                    ]
+                  },
+                  "mode": {
+                    "enum": [
+                      "required",
+                      "preferred",
+                      "optional",
+                      "disabled"
+                    ]
+                  }
+                }
+              }
+            },
+            "onUnavailable": {
+              "description": "Behaviour when a `required` operation cannot be served.",
+              "enum": [
+                "halt",
+                "escalate",
+                "degrade-to-local-heuristics"
+              ]
+            },
+            "dataHandling": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "maxClassification": {
+                  "enum": [
+                    "public",
+                    "internal",
+                    "confidential",
+                    "restricted"
+                  ]
+                },
+                "redactBeforeCall": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "models": {
+          "description": "Model policy expressed as abstract tiers per role, resolved by the AI Gateway. Concrete model IDs are intentionally not part of canonical definitions.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "roles",
+            "resolution"
+          ],
+          "properties": {
+            "resolution": {
+              "enum": [
+                "gateway-routed"
+              ]
+            },
+            "roles": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "planner",
+                "synthesiser"
+              ],
+              "properties": {
+                "planner": {
+                  "$ref": "#/$defs/modelRole"
+                },
+                "decomposer": {
+                  "$ref": "#/$defs/modelRole"
+                },
+                "evaluator": {
+                  "$ref": "#/$defs/modelRole"
+                },
+                "synthesiser": {
+                  "$ref": "#/$defs/modelRole"
+                },
+                "router": {
+                  "$ref": "#/$defs/modelRole"
+                }
+              }
+            },
+            "diversity": {
+              "description": "Require evaluator role to differ from generating model family where the gateway can.",
+              "type": "boolean"
+            }
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxWorkingTokens",
+            "compaction",
+            "handoff"
+          ],
+          "properties": {
+            "maxWorkingTokens": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "compaction": {
+              "enum": [
+                "summarise",
+                "sliding-window",
+                "retrieval",
+                "none"
+              ]
+            },
+            "memory": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "read": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "run-state",
+                      "workspace",
+                      "cortex"
+                    ]
+                  }
+                },
+                "write": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "run-state",
+                      "workspace",
+                      "cortex"
+                    ]
+                  }
+                }
+              }
+            },
+            "handoff": {
+              "description": "What may flow from the QB to delegated agents.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "maxContextTokens",
+                "minimiseByDefault"
+              ],
+              "properties": {
+                "maxContextTokens": {
+                  "type": "integer",
+                  "minimum": 100
+                },
+                "minimiseByDefault": {
+                  "type": "boolean"
+                },
+                "redactClassifications": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
                       "confidential",
                       "restricted"
                     ]
@@ -1176,288 +948,622 @@
             }
           }
         },
-        "deny": {
-          "$ref": "#/$defs/idList"
-        }
-      }
-    },
-    "escalation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "rules",
-        "default"
-      ],
-      "properties": {
-        "rules": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "on",
-              "action"
-            ],
-            "properties": {
-              "id": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
-              },
-              "on": {
-                "enum": [
-                  "replan-exhausted",
-                  "budget-exceeded",
-                  "capability-denied",
-                  "low-confidence",
-                  "safety-flag",
-                  "jev-unavailable",
-                  "evaluation-failed",
-                  "conflict-between-agents"
-                ]
-              },
-              "action": {
-                "enum": [
-                  "request-human",
-                  "return-partial",
-                  "hand-to-owner",
-                  "fail"
-                ]
-              },
-              "severity": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
-              }
-            }
-          }
-        },
-        "default": {
-          "enum": [
-            "request-human",
-            "return-partial",
-            "fail"
-          ]
-        }
-      }
-    },
-    "hitl": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "approvals",
-        "timeout",
-        "onTimeout"
-      ],
-      "properties": {
-        "approvals": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "when"
-            ],
-            "properties": {
-              "id": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
-              },
-              "when": {
-                "enum": [
-                  "plan-created",
-                  "external-send",
-                  "write-scope",
-                  "swarm-above-threshold",
-                  "budget-raise",
-                  "risk-at-least-high",
-                  "low-confidence-final"
-                ]
-              },
-              "description": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "timeout": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
-        },
-        "onTimeout": {
-          "enum": [
-            "deny",
-            "escalate",
-            "return-partial"
-          ]
-        }
-      }
-    },
-    "state": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "durability",
-        "resumable",
-        "store"
-      ],
-      "properties": {
-        "durability": {
-          "enum": [
-            "durable"
-          ]
-        },
-        "resumable": {
-          "const": true
-        },
-        "store": {
-          "description": "Abstract state store contract, not a connection string.",
-          "type": "string",
-          "pattern": "^gateway:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
-        },
-        "runStateSchema": {
-          "description": "Optional JSON Schema for the QB's run-state extension fields.",
-          "type": "object"
-        }
-      }
-    },
-    "dependencies": {
-      "description": "Single source of truth for cross-registry references: stable ID + semver range.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "version"
-        ],
-        "properties": {
-          "id": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/id"
-          },
-          "version": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
-          },
-          "optional": {
-            "type": "boolean",
-            "default": false
-          },
-          "digest": {
-            "description": "Optional integrity pin, honoured when the peer registry publishes digests.",
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
-          }
-        }
-      },
-      "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Reference convention; namespaces `capability:` and `gateway:` have no agreed owner."
-    },
-    "evidence": {
-      "description": "Evidence-emission contract the runtime MUST honour when executing this blueprint. Raw evidence never lives in Git.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "capture",
-        "tape",
-        "redaction",
-        "retention",
-        "sink"
-      ],
-      "properties": {
-        "capture": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "plans",
-              "decompositions",
-              "delegation-decisions",
-              "model-selections",
-              "capability-selections",
-              "tool-calls",
-              "jev-calls",
-              "retries",
-              "replans",
-              "checkpoints",
-              "evaluations",
-              "escalations",
-              "failures",
-              "latency",
-              "cost"
-            ]
-          }
-        },
-        "tape": {
-          "enum": [
-            "metadata-only",
-            "redacted-full",
-            "full"
-          ]
-        },
-        "redaction": {
-          "enum": [
-            "none",
-            "pseudonymise",
-            "aggregate-only"
-          ]
-        },
-        "retention": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
-        },
-        "sink": {
-          "type": "string",
-          "pattern": "^gateway:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
-        },
-        "sampling": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "maximum": 1,
-          "default": 1
-        }
-      }
-    },
-    "governance": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "selfModification",
-        "changeControl"
-      ],
-      "properties": {
-        "selfModification": {
-          "description": "A QB never rewrites or deploys its own canonical definition. Improvements arrive only via Git PR.",
-          "const": "forbidden"
-        },
-        "changeControl": {
+        "checkpointing": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "securityReviewOnPermissionWidening"
+            "granularity",
+            "triggers",
+            "retention",
+            "resume"
           ],
           "properties": {
-            "securityReviewOnPermissionWidening": {
-              "const": true
+            "granularity": {
+              "enum": [
+                "step",
+                "subtask",
+                "phase"
+              ]
             },
-            "minApprovals": {
+            "triggers": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "plan-created",
+                  "plan-revised",
+                  "subtask-completed",
+                  "before-side-effect",
+                  "before-hitl",
+                  "swarm-join",
+                  "budget-threshold"
+                ]
+              }
+            },
+            "retention": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+            },
+            "resume": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "strategy",
+                "requireIdempotentSideEffects"
+              ],
+              "properties": {
+                "strategy": {
+                  "enum": [
+                    "last-checkpoint",
+                    "explicit-checkpoint",
+                    "fork-branch"
+                  ]
+                },
+                "requireIdempotentSideEffects": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "rollback": {
+              "description": "Rollback creates a new branch in the lineage; history is never rewritten.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowed": {
+                  "type": "boolean"
+                },
+                "sideEffects": {
+                  "enum": [
+                    "compensate",
+                    "block",
+                    "ignore"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "concurrency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxParallelDelegations",
+            "maxParallelTinyAgents"
+          ],
+          "properties": {
+            "maxParallelDelegations": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 5,
+              "maximum": 200
+            },
+            "maxParallelTinyAgents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "perCapability": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/platformId"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "swarm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "patterns": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "map-reduce",
+                  "fan-out-verify",
+                  "debate",
+                  "tournament"
+                ]
+              }
+            },
+            "aggregation": {
+              "enum": [
+                "synthesise",
+                "vote",
+                "best-of",
+                "merge-structured"
+              ]
+            },
+            "requiresHitlAbove": {
+              "description": "Swarm size above which human approval is required.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "abortOnFailureRatio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "maxSize",
+              "patterns",
+              "aggregation"
+            ]
+          }
+        },
+        "budgets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "perRun",
+            "onExceed"
+          ],
+          "properties": {
+            "perRun": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "maxCostUsd",
+                "maxWallClock"
+              ],
+              "properties": {
+                "maxCostUsd": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "maxTokens": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxWallClock": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+                },
+                "maxToolCalls": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxDelegations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "maxTinyAgents": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "softLimitRatio": {
+              "description": "Fraction of a hard limit at which budget-pressure fires.",
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1
+            },
+            "onExceed": {
+              "enum": [
+                "halt",
+                "escalate",
+                "partial-result"
+              ]
+            },
+            "callerOverride": {
+              "description": "Whether callers may lower (never raise) budgets per run.",
+              "enum": [
+                "lower-only",
+                "none"
+              ],
+              "default": "lower-only"
+            }
+          }
+        },
+        "capabilities": {
+          "description": "Least-privilege capability permissions. Default is deny; every allowed ID must appear in `dependencies`.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "default",
+            "allow"
+          ],
+          "properties": {
+            "default": {
+              "const": "deny"
+            },
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "scopes"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/platformId"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "read",
+                        "write",
+                        "execute",
+                        "external-send"
+                      ]
+                    }
+                  },
+                  "requiresHitl": {
+                    "type": "boolean"
+                  },
+                  "constraints": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "rateLimitPerRun": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "dataClassificationMax": {
+                        "enum": [
+                          "public",
+                          "internal",
+                          "confidential",
+                          "restricted"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "deny": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/platformId"
+              }
+            }
+          }
+        },
+        "escalation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules",
+            "default"
+          ],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "on",
+                  "action"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+                  },
+                  "on": {
+                    "enum": [
+                      "replan-exhausted",
+                      "budget-exceeded",
+                      "capability-denied",
+                      "low-confidence",
+                      "safety-flag",
+                      "jev-unavailable",
+                      "evaluation-failed",
+                      "conflict-between-agents"
+                    ]
+                  },
+                  "action": {
+                    "enum": [
+                      "request-human",
+                      "return-partial",
+                      "hand-to-owner",
+                      "fail"
+                    ]
+                  },
+                  "severity": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/riskLevel"
+                  }
+                }
+              }
+            },
+            "default": {
+              "enum": [
+                "request-human",
+                "return-partial",
+                "fail"
+              ]
+            }
+          }
+        },
+        "hitl": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "approvals",
+            "timeout",
+            "onTimeout"
+          ],
+          "properties": {
+            "approvals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "when"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+                  },
+                  "when": {
+                    "enum": [
+                      "plan-created",
+                      "external-send",
+                      "write-scope",
+                      "swarm-above-threshold",
+                      "budget-raise",
+                      "risk-at-least-high",
+                      "low-confidence-final"
+                    ]
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "timeout": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+            },
+            "onTimeout": {
+              "enum": [
+                "deny",
+                "escalate",
+                "return-partial"
+              ]
+            }
+          }
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "durability",
+            "resumable",
+            "store"
+          ],
+          "properties": {
+            "durability": {
+              "enum": [
+                "durable"
+              ]
+            },
+            "resumable": {
+              "const": true
+            },
+            "store": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/gatewayId"
+            },
+            "runStateSchema": {
+              "description": "Optional JSON Schema for the QB's run-state extension fields.",
+              "type": "object"
+            }
+          }
+        },
+        "evidence": {
+          "description": "Evidence-emission contract the runtime MUST honour when executing this blueprint. Raw evidence never lives in Git.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capture",
+            "tape",
+            "redaction",
+            "retention",
+            "sink"
+          ],
+          "properties": {
+            "capture": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "plans",
+                  "decompositions",
+                  "delegation-decisions",
+                  "model-selections",
+                  "capability-selections",
+                  "tool-calls",
+                  "jev-calls",
+                  "retries",
+                  "replans",
+                  "checkpoints",
+                  "evaluations",
+                  "escalations",
+                  "failures",
+                  "latency",
+                  "cost"
+                ]
+              }
+            },
+            "tape": {
+              "enum": [
+                "metadata-only",
+                "redacted-full",
+                "full"
+              ]
+            },
+            "redaction": {
+              "enum": [
+                "none",
+                "pseudonymise",
+                "aggregate-only"
+              ]
+            },
+            "retention": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/duration"
+            },
+            "sink": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/gatewayId"
+            },
+            "sampling": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1,
               "default": 1
             }
           }
+        },
+        "governance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "selfModification",
+            "changeControl"
+          ],
+          "properties": {
+            "selfModification": {
+              "description": "A QB never rewrites or deploys its own canonical definition. Improvements arrive only via Git PR.",
+              "const": "forbidden"
+            },
+            "changeControl": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "securityReviewOnPermissionWidening"
+              ],
+              "properties": {
+                "securityReviewOnPermissionWidening": {
+                  "const": true
+                },
+                "minApprovals": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5,
+                  "default": 1
+                }
+              }
+            }
+          }
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "registrySchema",
+            "runtime",
+            "gatewayContracts"
+          ],
+          "properties": {
+            "registrySchema": {
+              "const": "registry.zeptly.dev/v1alpha1"
+            },
+            "runtime": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract",
+                "version"
+              ],
+              "properties": {
+                "contract": {
+                  "description": "Runtime interpretation contract the blueprint targets. Executed by a runtime such as Trigger.dev; never named here.",
+                  "const": "qb-runtime"
+                },
+                "version": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
+                }
+              }
+            },
+            "gatewayContracts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/gatewayId"
+                  },
+                  "version": {
+                    "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
+                  }
+                }
+              }
+            },
+            "breaking": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Human-readable breaking changes relative to provenance.parent."
+            }
+          }
+        },
+        "extensions": {
+          "description": "Namespaced escape hatch for runtime-specific hints. Linted for secrets and URLs; never authoritative.",
+          "type": "object"
         }
+      },
+      "description": "QB-specific semantics (unchanged from the candidate architecture): decomposition, delegation, replanning, budgets, concurrency, escalation, HITL, evaluation, Jev policy, checkpointing, swarm."
+    },
+    "references": {
+      "description": "Structured cross-registry references {registry, id, version, digest?}. Single declaration table for skills / tiny-agents / execution-agents / qb-agents used by `spec`.",
+      "type": "array",
+      "items": {
+        "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
       }
     },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "origin",
+        "createdAt",
         "authors",
-        "createdAt"
+        "sourceRefs",
+        "transformations"
       ],
       "properties": {
-        "origin": {
-          "enum": [
-            "human",
-            "wisdom-of-compute",
-            "import"
-          ]
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         },
         "authors": {
           "type": "array",
@@ -1466,39 +1572,14 @@
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/actor"
           }
         },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "parent": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
-        },
-        "derivedFrom": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "evidenceRefs": {
-              "type": "array",
-              "items": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
-              }
-            },
-            "evalRuns": {
-              "type": "array",
-              "items": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
-              }
-            },
-            "hypothesis": {
-              "type": "string",
-              "minLength": 10
-            },
-            "humanReviewRequired": {
-              "const": true
-            }
+        "sourceRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
           }
         },
-        "sources": {
+        "externalSources": {
+          "description": "Human-facing citations. URLs are permitted only here and in metadata.links.",
           "type": "array",
           "items": {
             "type": "object",
@@ -1518,122 +1599,216 @@
             }
           }
         },
-        "changelog": {
-          "type": "string",
-          "maxLength": 4000
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "origin": {
-                "const": "wisdom-of-compute"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "parent",
-              "derivedFrom"
-            ],
-            "properties": {
-              "derivedFrom": {
-                "required": [
-                  "evidenceRefs",
-                  "evalRuns",
-                  "hypothesis",
-                  "humanReviewRequired"
-                ],
-                "properties": {
-                  "evidenceRefs": {
-                    "minItems": 1,
-                    "type": "array"
-                  },
-                  "evalRuns": {
-                    "minItems": 1,
-                    "type": "array"
-                  }
-                },
-                "type": "object"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "compatibility": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "registrySchema",
-        "runtime",
-        "gatewayContracts"
-      ],
-      "properties": {
-        "registrySchema": {
-          "const": "qb.zeptly.dev/v1"
-        },
-        "runtime": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "contract",
-            "version"
-          ],
-          "properties": {
-            "contract": {
-              "description": "Runtime interpretation contract the blueprint targets. Executed by a runtime such as Trigger.dev; never named here.",
-              "const": "qb-runtime"
-            },
-            "version": {
-              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
-            }
-          }
-        },
-        "gatewayContracts": {
+        "transformations": {
           "type": "array",
-          "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "id",
-              "version"
+              "kind"
             ],
             "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^gateway:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
+              "kind": {
+                "enum": [
+                  "manual-edit",
+                  "wisdom-of-compute"
+                ]
               },
-              "version": {
-                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
+              "description": {
+                "type": "string"
+              },
+              "hypothesis": {
+                "type": "string",
+                "minLength": 10
+              },
+              "evidenceRefs": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
+                }
+              },
+              "evalRuns": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
+                }
+              },
+              "humanReviewRequired": {
+                "const": true
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "wisdom-of-compute"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "hypothesis",
+                    "evidenceRefs",
+                    "evalRuns",
+                    "humanReviewRequired"
+                  ],
+                  "properties": {
+                    "evidenceRefs": {
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "evalRuns": {
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            ]
           }
         },
-        "breaking": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Human-readable breaking changes relative to provenance.parent."
+        "changelog": {
+          "type": "string",
+          "maxLength": 4000
         }
       }
     },
-    "extensions": {
-      "description": "Namespaced escape hatch for runtime-specific hints. Linted for secrets and URLs; never authoritative.",
-      "type": "object"
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "capabilities",
+        "approvals"
+      ],
+      "properties": {
+        "classification": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/classification"
+        },
+        "capabilities": {
+          "description": "Capability tokens this artifact requests. MUST equal the set in spec.capabilities.allow; never silently altered by a compiler or runtime.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/platformId"
+          }
+        },
+        "approvals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "actor",
+              "at",
+              "subjectDigest"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "security-review",
+                  "release-approval"
+                ]
+              },
+              "actor": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/actor"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "subjectDigest": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+              },
+              "ref": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
+              }
+            }
+          }
+        }
+      }
+    },
+    "attestations": {
+      "description": "Digest-bound assessments. Every attestation MUST bind to this artifact's exact current digest; a stale subjectDigest fails validation.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "ref",
+          "subjectDigest",
+          "capturedAt",
+          "synthetic",
+          "summary"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "ref": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
+          },
+          "subjectDigest": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "gate": {
+            "enum": [
+              "candidate",
+              "canonical"
+            ]
+          },
+          "result": {
+            "enum": [
+              "pass",
+              "fail",
+              "inconclusive"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 600
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "evaluation"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "gate",
+                "result",
+                "metrics"
+              ]
+            }
+          }
+        ]
+      }
     }
   },
   "$defs": {
-    "idList": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/id"
-      }
-    },
     "strategy": {
       "enum": [
         "direct",
@@ -1723,6 +1898,5 @@
         }
       }
     }
-  },
-  "$comment": "PROVISIONAL: pending cross-registry reconciliation with registry-execution-agents, registry-tiny-agents and registry-skills. NOT YET CANONICAL. Blueprint structure is the candidate QB architecture; ID syntax, lifecycle terms and digest/seal protocol are not yet canonical."
+  }
 }

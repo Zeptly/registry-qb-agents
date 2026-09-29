@@ -1,5 +1,5 @@
-// Core registry logic: loading, digests, schema + semantic validation, immutability checks.
-// Pure data processing. No network access, no runtime behaviour.
+// Core registry logic for the QB registry (Zeptly Registry Protocol v0.1 rendering).
+// Pure data processing: no network access, no runtime behaviour.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -11,51 +11,45 @@ import semver from "semver";
 import YAML from "yaml";
 
 export const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const SEALED = new Set(["canary", "stable", "deprecated", "retired"]);
-export const STATUS_ORDER = ["draft", "candidate", "canary", "stable", "deprecated", "retired"];
-export const TRANSITIONS = {
-  draft: ["candidate"],
-  candidate: ["draft", "canary"],
-  canary: ["stable", "retired"],
-  stable: ["deprecated"],
-  deprecated: ["retired"],
-  retired: [],
-};
+export const REGISTRY = "qb-agents";
+export const SCOPES = { production: "qbs", synthetic: "synthetic/qbs" };
+export const SYNTHETIC_ID_PREFIX = "synthetic.";
+export const SYN_STORE = "evidence://synthetic-example/";
+export const LIFECYCLE_TRANSITIONS = { active: ["deprecated", "revoked"], deprecated: ["revoked"], revoked: [] };
+export const ALLOWED_FILES = new Set(["blueprint.yaml", "release.yaml", "lifecycle.yaml", "evals/suite.yaml", "evidence/refs.yaml"]);
+const CLASSIFICATION_ORDER = ["public", "internal", "confidential", "restricted"];
 
 // ---------- helpers ----------
 export function canonicalize(v) {
   if (Array.isArray(v)) return `[${v.map(canonicalize).join(",")}]`;
-  if (v && typeof v === "object") {
-    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(v[k])}`).join(",")}}`;
-  }
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(v[k])}`).join(",")}}`;
   return JSON.stringify(v);
 }
 export const sha256 = (s) => "sha256:" + crypto.createHash("sha256").update(s).digest("hex");
 
-/** Digest of the sealed definition: everything except mutable `lifecycle`. */
-export function blueprintDigest(bp) {
-  const { lifecycle, ...rest } = bp; // eslint-disable-line no-unused-vars
-  return sha256(canonicalize(rest));
+/**
+ * Artifact digest: sha256 of canonical JSON of the artifact EXCLUDING the overlay/assessment fields that legitimately
+ * change after content is fixed: metadata.maturity, metadata.lifecycle, security.approvals and attestations.
+ * Attestations and approvals bind to this digest, so they cannot be inside it.
+ */
+export function artifactDigest(bp) {
+  const c = JSON.parse(JSON.stringify(bp));
+  if (c.metadata) { delete c.metadata.maturity; delete c.metadata.lifecycle; }
+  if (c.security) delete c.security.approvals;
+  delete c.attestations;
+  return sha256(canonicalize(c));
 }
 export const suiteDigest = (suite) => sha256(canonicalize(suite));
 
-export function parseYaml(text) {
-  return YAML.parse(text, { schema: "core", uniqueKeys: true });
-}
-function readYaml(file) {
-  return parseYaml(fs.readFileSync(file, "utf8"));
-}
+export const parseYaml = (text) => YAML.parse(text, { schema: "core", uniqueKeys: true });
+const readYaml = (file) => parseYaml(fs.readFileSync(file, "utf8"));
 
-function walkStrings(node, cb, pathParts = []) {
-  if (typeof node === "string") cb(node, pathParts);
-  else if (Array.isArray(node)) node.forEach((v, i) => walkStrings(v, cb, [...pathParts, i]));
-  else if (node && typeof node === "object") {
-    for (const [k, v] of Object.entries(node)) {
-      if (k === "$schema" || k === "$id") continue;
-      walkStrings(v, cb, [...pathParts, k]);
-    }
-  }
+function walkStrings(node, cb, p = []) {
+  if (typeof node === "string") cb(node, p);
+  else if (Array.isArray(node)) node.forEach((v, i) => walkStrings(v, cb, [...p, i]));
+  else if (node && typeof node === "object") for (const [k, v] of Object.entries(node)) { if (k === "$schema" || k === "$id") continue; walkStrings(v, cb, [...p, k]); }
 }
+const classRank = (c) => CLASSIFICATION_ORDER.indexOf(c);
 
 // ---------- schemas ----------
 let _ajv;
@@ -64,19 +58,13 @@ export function getAjv() {
   const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false, allowUnionTypes: true });
   addFormats(ajv);
   const dir = path.join(PKG_ROOT, "schemas");
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".schema.json"))) {
-    ajv.addSchema(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
-  }
-  _ajv = ajv;
-  return ajv;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".schema.json"))) ajv.addSchema(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+  return (_ajv = ajv);
 }
 const SCHEMA_IDS = {
-  blueprint: "urn:zeptly:qb:schema:blueprint:v1",
-  suite: "urn:zeptly:qb:schema:eval-suite:v1",
-  refs: "urn:zeptly:qb:schema:evidence-refs:v1",
-  release: "urn:zeptly:qb:schema:release:v1",
-  index: "urn:zeptly:qb:schema:registry-index:v1",
-  envelope: "urn:zeptly:qb:schema:evidence-envelope:v1",
+  blueprint: "urn:zeptly:qb:schema:blueprint:v1", suite: "urn:zeptly:qb:schema:eval-suite:v1", refs: "urn:zeptly:qb:schema:evidence-refs:v1",
+  release: "urn:zeptly:qb:schema:release:v1", lifecycle: "urn:zeptly:qb:schema:lifecycle:v1", index: "urn:zeptly:qb:schema:registry-index:v1",
+  envelope: "urn:zeptly:qb:schema:evidence-envelope:v1", lock: "urn:zeptly:qb:schema:resolution-lock:v1",
 };
 export function schemaErrors(kind, data) {
   const validate = getAjv().getSchema(SCHEMA_IDS[kind]);
@@ -85,57 +73,56 @@ export function schemaErrors(kind, data) {
 }
 
 // ---------- loading ----------
-/** Discover qbs/<slug>/<version>/blueprint.yaml under root. */
 export function loadRegistry(root) {
-  const base = path.join(root, "qbs");
   const versions = [];
-  if (!fs.existsSync(base)) return versions;
-  for (const slug of fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory())) {
-    for (const ver of fs.readdirSync(path.join(base, slug.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
-      const dir = path.join(base, slug.name, ver.name);
-      const rel = path.relative(root, dir);
-      const entry = { slug: slug.name, dirVersion: ver.name, dir, rel, errors: [], warnings: [] };
-      const load = (name) => {
-        const f = path.join(dir, name);
-        if (!fs.existsSync(f)) return undefined;
-        try { return readYaml(f); } catch (e) { entry.errors.push({ code: "E_YAML", file: `${rel}/${name}`, message: e.message }); return null; }
-      };
-      entry.blueprint = load("blueprint.yaml");
-      entry.suite = load("evals/suite.yaml");
-      entry.refs = load("evidence/refs.yaml");
-      entry.release = load("release.yaml");
-      versions.push(entry);
+  for (const [scope, sub] of Object.entries(SCOPES)) {
+    const base = path.join(root, sub);
+    if (!fs.existsSync(base)) continue;
+    for (const idDir of fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory())) {
+      for (const ver of fs.readdirSync(path.join(base, idDir.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+        const dir = path.join(base, idDir.name, ver.name);
+        const rel = path.relative(root, dir).split(path.sep).join("/");
+        const entry = { scope, dirId: idDir.name, dirVersion: ver.name, dir, rel, errors: [], warnings: [] };
+        const load = (name) => {
+          const f = path.join(dir, name);
+          if (!fs.existsSync(f)) return undefined;
+          try { return readYaml(f); } catch (e) { entry.errors.push({ code: "E_YAML", file: `${rel}/${name}`, message: e.message }); return null; }
+        };
+        entry.blueprint = load("blueprint.yaml");
+        entry.suite = load("evals/suite.yaml");
+        entry.refs = load("evidence/refs.yaml");
+        entry.release = load("release.yaml");
+        entry.overlay = load("lifecycle.yaml");
+        entry.files = listFiles(dir);
+        versions.push(entry);
+      }
     }
   }
   return versions;
 }
+function listFiles(dir, prefix = "") {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? listFiles(path.join(dir, d.name), `${prefix}${d.name}/`) : [`${prefix}${d.name}`]));
+}
 
-// ---------- semantic rules ----------
+// ---------- literal lint ----------
 const URL_RE = /\bhttps?:\/\//i;
 const INFRA_HOST_RE = /\b[a-z0-9.-]+\.(up\.railway\.app|railway\.internal|railway\.app|trigger\.dev|supabase\.(co|in))\b/i;
-const SECRET_RES = [
-  /\bsk-[A-Za-z0-9_-]{20,}/, /\bAKIA[0-9A-Z]{16}\b/, /\bgh[pousr]_[A-Za-z0-9]{30,}/,
-  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
-  /\b(api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*["']?[A-Za-z0-9/+_-]{12,}/i,
-];
+const SECRET_RES = [/\bsk-[A-Za-z0-9_-]{20,}/, /\bAKIA[0-9A-Z]{16}\b/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\b(api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*["']?[A-Za-z0-9/+_-]{12,}/i];
 const MODEL_RE = /\b(claude-[a-z0-9.-]+|gpt-[a-z0-9.-]+|gemini-[a-z0-9.-]+|llama-?\d[a-z0-9.-]*|mistral-[a-z0-9.-]+)\b/i;
 const REPO_RE = /\bZeptly\/registry-|\bregistry-(execution-agents|tiny-agents|skills|qb-agents)\b|\.\.\/|\bgithub\.com\//i;
-const URL_ALLOWED = [["metadata", "links"], ["provenance", "sources"]];
-
+const URL_ALLOWED = [["metadata", "links"], ["provenance", "externalSources"]];
 function lintLiterals(bp, err) {
   walkStrings(bp, (s, p) => {
     const where = "/" + p.join("/");
-    const inAllowed = URL_ALLOWED.some((a) => a.every((seg, i) => p[i] === seg));
-    if (inAllowed) return;
-    if (URL_RE.test(s) || INFRA_HOST_RE.test(s)) err("E_ENDPOINT", where, "URLs/hosts are forbidden in blueprints; reach services through abstract gateway contracts");
+    if (URL_ALLOWED.some((a) => a.every((seg, i) => p[i] === seg))) return;
+    if (URL_RE.test(s) || INFRA_HOST_RE.test(s)) err("E_ENDPOINT", where, "URLs/hosts are forbidden; reach services through abstract gateway contracts");
     if (SECRET_RES.some((r) => r.test(s))) err("E_SECRET", where, "value looks like a credential");
-    if (REPO_RE.test(s)) err("E_REPO_COUPLING", where, "references must use stable IDs, not repository names or relative paths");
-    if (p[0] !== "contracts" && p[0] !== "identity" && MODEL_RE.test(s)) err("E_MODEL_PIN", where, "concrete model identifiers are not allowed; use model tiers");
+    if (REPO_RE.test(s)) err("E_REPO_COUPLING", where, "references must use structured {registry,id,version}, not repository names or relative paths");
+    if (!(p[0] === "spec" && (p[1] === "contracts" || p[1] === "identity")) && MODEL_RE.test(s)) err("E_MODEL_PIN", where, "concrete model identifiers are not allowed; use model tiers");
   });
 }
 
-const kindOf = (id) => id.split(":")[0];
-
+// ---------- per-version validation ----------
 export function validateVersion(v, ctx) {
   const { errors, warnings } = v;
   const bp = v.blueprint;
@@ -143,144 +130,145 @@ export function validateVersion(v, ctx) {
   const err = (code, where, message, f = "blueprint.yaml") => errors.push({ code, file: file(f), where, message });
   const warn = (code, where, message, f = "blueprint.yaml") => warnings.push({ code, file: file(f), where, message });
 
+  // repository hygiene: no runtime tapes / unexpected artifacts
+  for (const f of v.files) if (!ALLOWED_FILES.has(f)) err("E_UNEXPECTED_FILE", "", `${f} is not a registry artifact file. Raw tapes, trajectories and runtime payloads must stay in the evidence store, never in Git`, f);
+
   if (bp === undefined) return err("E_MISSING", "", "blueprint.yaml is missing");
   if (bp === null) return;
   for (const m of schemaErrors("blueprint", bp)) err("E_SCHEMA", "", m);
-  if (errors.some((e) => e.code === "E_SCHEMA")) return; // semantic checks assume shape
+  if (errors.some((e) => e.code === "E_SCHEMA")) return;
 
-  // identity of the directory
-  const slug = bp.id.slice(3);
-  if (slug !== v.slug) err("E_PATH", "/id", `directory qbs/${v.slug} does not match id ${bp.id}`);
-  if (bp.version !== v.dirVersion) err("E_PATH", "/version", `directory ${v.dirVersion} does not match version ${bp.version}`);
+  const md = bp.metadata, spec = bp.spec;
+  const id = md.id;
+  const digest = (v.digest = artifactDigest(bp));
+
+  // directory / scope identity
+  if (id !== v.dirId) err("E_PATH", "/metadata/id", `directory ${v.dirId} does not match metadata.id ${id}`);
+  if (md.version !== v.dirVersion) err("E_PATH", "/metadata/version", `directory ${v.dirVersion} does not match metadata.version ${md.version}`);
+  const isSynthetic = md.synthetic === true;
+  if (isSynthetic !== (v.scope === "synthetic")) err("E_SYNTHETIC", "/metadata/synthetic", v.scope === "synthetic" ? "artifacts under synthetic/ must set metadata.synthetic: true" : "synthetic artifacts may only live under synthetic/qbs/, never in the production namespace");
+  if (isSynthetic !== id.startsWith(SYNTHETIC_ID_PREFIX)) err("E_SYNTHETIC", "/metadata/id", `synthetic artifacts must use the "${SYNTHETIC_ID_PREFIX}" id namespace and production artifacts must not`);
 
   lintLiterals(bp, (code, where, message) => err(code, where, message));
 
-  // ---- dependencies ----
-  const deps = new Map();
-  for (const [i, d] of bp.dependencies.entries()) {
-    if (deps.has(d.id)) err("E_DEP_DUP", `/dependencies/${i}`, `duplicate dependency ${d.id}`);
-    deps.set(d.id, d);
-    if (!semver.validRange(d.version)) err("E_RANGE", `/dependencies/${i}/version`, `invalid semver range "${d.version}"`);
-    if (!ctx.kinds.has(kindOf(d.id))) err("E_KIND", `/dependencies/${i}/id`, `kind "${kindOf(d.id)}" is not declared in registries.yaml`);
-    if (d.id === bp.id) err("E_DEP_SELF", `/dependencies/${i}`, "a QB cannot depend on itself");
-  }
-  const need = (id, where) => { if (!deps.has(id)) err("E_DEP_UNDECLARED", where, `${id} is used but not declared in dependencies`); };
-  bp.delegation.executionAgents.allow.forEach((id, i) => {
-    need(id, `/delegation/executionAgents/allow/${i}`);
-    if (kindOf(id) !== "execution-agent") err("E_KIND", `/delegation/executionAgents/allow/${i}`, "expected an execution-agent ID");
+  // ---- references (structured, structural validation only) ----
+  const refKey = (r) => `${r.registry}/${r.id}`;
+  const refs = new Map();
+  bp.references.forEach((r, i) => {
+    if (refs.has(refKey(r))) err("E_REF_DUP", `/references/${i}`, `duplicate reference ${refKey(r)}`);
+    refs.set(refKey(r), r);
+    if (!semver.validRange(r.version)) err("E_RANGE", `/references/${i}/version`, `invalid semver range "${r.version}"`);
+    if (!ctx.registries.has(r.registry)) err("E_REGISTRY", `/references/${i}/registry`, `registry "${r.registry}" is not declared in registries.yaml`);
+    if (r.registry === REGISTRY && r.id === id) err("E_REF_SELF", `/references/${i}`, "an artifact cannot reference itself");
+    if (r.registry === REGISTRY) err("E_NESTED_QB", `/references/${i}`, "nested QB execution is disabled; qb-agents references are not allowed as execution dependencies");
   });
-  (bp.delegation.tinyAgents.allowedTemplates ?? []).forEach((id, i) => { need(id, `/delegation/tinyAgents/allowedTemplates/${i}`); if (kindOf(id) !== "tiny-agent") err("E_KIND", `/delegation/tinyAgents/allowedTemplates/${i}`, "expected a tiny-agent ID"); });
-  (bp.delegation.tinyAgents.allowedSkills ?? []).forEach((id, i) => { need(id, `/delegation/tinyAgents/allowedSkills/${i}`); if (kindOf(id) !== "skill") err("E_KIND", `/delegation/tinyAgents/allowedSkills/${i}`, "expected a skill ID"); });
-  bp.capabilities.allow.forEach((c, i) => { need(c.id, `/capabilities/allow/${i}/id`); if (!["capability", "skill"].includes(kindOf(c.id))) err("E_KIND", `/capabilities/allow/${i}/id`, "expected a capability or skill ID"); });
-  (bp.capabilities.deny ?? []).forEach((id, i) => need(id, `/capabilities/deny/${i}`)); // deny lists must be explicit about what they name
-  Object.keys(bp.concurrency.perCapability ?? {}).forEach((id) => need(id, `/concurrency/perCapability/${id}`));
-  bp.delegation.rules.forEach((r, i) => {
-    if (r.target) need(r.target, `/delegation/rules/${i}/target`);
-  });
-  const allowedCaps = new Set(bp.capabilities.allow.map((c) => c.id));
-  for (const id of bp.capabilities.deny ?? []) if (allowedCaps.has(id)) err("E_CAP_CONFLICT", "/capabilities", `${id} is both allowed and denied`);
-  need(bp.jev.gateway.contract, "/jev/gateway/contract");
-  need(bp.state.store, "/state/store");
-  need(bp.evidence.sink, "/evidence/sink");
-
-  // gateway contract consistency
-  if (!semver.validRange(bp.jev.gateway.version)) err("E_RANGE", "/jev/gateway/version", `invalid semver range "${bp.jev.gateway.version}"`);
-  if (!semver.validRange(bp.compatibility.runtime.version)) err("E_RANGE", "/compatibility/runtime/version", "invalid semver range");
-  const declaredGw = new Map(bp.compatibility.gatewayContracts.map((g) => [g.id, g]));
-  for (const g of bp.compatibility.gatewayContracts) if (!semver.validRange(g.version)) err("E_RANGE", "/compatibility/gatewayContracts", `invalid semver range "${g.version}"`);
-  for (const [id, where] of [[bp.jev.gateway.contract, "/jev/gateway/contract"], [bp.state.store, "/state/store"], [bp.evidence.sink, "/evidence/sink"]]) {
-    if (!declaredGw.has(id)) err("E_GATEWAY_COMPAT", where, `${id} must be listed in compatibility.gatewayContracts`);
-  }
-  if (bp.jev.gateway.contract.includes("jev") === false) warn("W_JEV_CONTRACT", "/jev/gateway/contract", "System-1 contract ID does not mention jev");
-
-  // ---- internal consistency ----
-  const o = bp.orchestration;
-  if (!o.allowedStrategies.includes(o.defaultStrategy)) err("E_STRATEGY", "/orchestration/defaultStrategy", "default strategy must be in allowedStrategies");
-  if (o.allowedStrategies.includes("swarm") && !bp.swarm.enabled) err("E_SWARM", "/orchestration/allowedStrategies", "swarm strategy allowed but swarm.enabled is false");
-  if (bp.delegation.rules.some((r) => r.action === "swarm") && !bp.swarm.enabled) err("E_SWARM", "/delegation/rules", "a rule requests swarm but swarm.enabled is false");
-  const ta = bp.delegation.tinyAgents;
-  if (!ta.allowCompile && bp.delegation.rules.some((r) => r.action === "compile-tiny-agent")) err("E_TINY", "/delegation/rules", "a rule compiles Tiny Agents but tinyAgents.allowCompile is false");
-  if (!ta.allowCompile && bp.delegation.fallback === "compile-tiny-agent") err("E_TINY", "/delegation/fallback", "fallback compiles Tiny Agents but allowCompile is false");
-  bp.delegation.rules.forEach((r, i) => {
+  const need = (registry, rid, where) => { if (!refs.has(`${registry}/${rid}`)) err("E_REF_UNDECLARED", where, `${registry}/${rid} is used but not declared in references`); };
+  spec.delegation.executionAgents.allow.forEach((x, i) => need("execution-agents", x, `/spec/delegation/executionAgents/allow/${i}`));
+  (spec.delegation.tinyAgents.allowedTemplates ?? []).forEach((x, i) => need("tiny-agents", x, `/spec/delegation/tinyAgents/allowedTemplates/${i}`));
+  (spec.delegation.tinyAgents.allowedSkills ?? []).forEach((x, i) => need("skills", x, `/spec/delegation/tinyAgents/allowedSkills/${i}`));
+  spec.delegation.rules.forEach((r, i) => {
     if (r.action === "delegate-execution-agent") {
-      if (!r.target) err("E_RULE_TARGET", `/delegation/rules/${i}`, "delegate-execution-agent rules need a target");
-      else if (!bp.delegation.executionAgents.allow.includes(r.target)) err("E_RULE_TARGET", `/delegation/rules/${i}/target`, `${r.target} is not in executionAgents.allow`);
+      if (!r.target) err("E_RULE_TARGET", `/spec/delegation/rules/${i}`, "delegate-execution-agent rules need a target");
+      else if (!spec.delegation.executionAgents.allow.includes(r.target)) err("E_RULE_TARGET", `/spec/delegation/rules/${i}/target`, `${r.target} is not in executionAgents.allow`);
     }
+    if (r.action === "compile-tiny-agent" && r.target) need("tiny-agents", r.target, `/spec/delegation/rules/${i}/target`);
   });
-  const perRun = bp.budgets.perRun;
-  if (perRun.maxTinyAgents !== undefined && ta.maxPerRun > perRun.maxTinyAgents) err("E_BUDGET", "/delegation/tinyAgents/maxPerRun", "exceeds budgets.perRun.maxTinyAgents");
-  if (perRun.maxTinyAgents !== undefined && bp.concurrency.maxParallelTinyAgents > perRun.maxTinyAgents) warn("W_BUDGET", "/concurrency/maxParallelTinyAgents", "exceeds budgets.perRun.maxTinyAgents (never reachable)");
-  if (bp.swarm.enabled && bp.swarm.maxSize > ta.maxPerRun && ta.allowCompile) err("E_BUDGET", "/swarm/maxSize", "swarm size exceeds tinyAgents.maxPerRun");
-  if (bp.swarm.enabled && perRun.maxTinyAgents !== undefined && bp.swarm.maxSize > perRun.maxTinyAgents) err("E_BUDGET", "/swarm/maxSize", "swarm size exceeds budgets.perRun.maxTinyAgents");
-  if (bp.swarm.enabled && bp.swarm.requiresHitlAbove !== undefined && !bp.hitl.approvals.some((a) => a.when === "swarm-above-threshold")) err("E_HITL", "/swarm/requiresHitlAbove", "needs a hitl approval with when: swarm-above-threshold");
-  if (bp.replanning.triggers.includes("budget-pressure") && bp.budgets.softLimitRatio === undefined) err("E_BUDGET", "/budgets/softLimitRatio", "budget-pressure trigger requires softLimitRatio");
-  if (bp.checkpointing.granularity && bp.checkpointing.triggers.includes("before-hitl") === false && bp.hitl.approvals.length) warn("W_CHECKPOINT", "/checkpointing/triggers", "HITL approvals exist but checkpointing lacks before-hitl");
-  if (bp.context.handoff.maxContextTokens > bp.context.maxWorkingTokens) warn("W_CONTEXT", "/context/handoff/maxContextTokens", "handoff limit exceeds working context");
 
-  // Jev consistency
-  const jevOp = (op) => bp.jev.operations.find((x) => x.op === op)?.mode ?? "disabled";
-  if (bp.planning.review.systemOneCritique && jevOp("critique") === "disabled") err("E_JEV", "/planning/review/systemOneCritique", "requires jev operation `critique` to be enabled");
-  const evals = [...(bp.evaluation.intermediate.evaluators ?? []), ...bp.evaluation.final.evaluators];
-  if (evals.some((e) => e.kind === "system-one") && jevOp("evaluate") === "disabled") err("E_JEV", "/evaluation", "system-one evaluators require jev operation `evaluate`");
-  if (bp.delegation.executionAgents.selection === "system-one-routed" && jevOp("route") === "disabled") err("E_JEV", "/delegation/executionAgents/selection", "system-one-routed requires jev operation `route`");
-  if (bp.jev.onUnavailable === "degrade-to-local-heuristics" && bp.jev.operations.some((x) => x.mode === "required")) warn("W_JEV", "/jev/onUnavailable", "required operations degrade to local heuristics when Jev is unavailable; confirm this is intended");
-  if (new Set(bp.jev.operations.map((x) => x.op)).size !== bp.jev.operations.length) err("E_JEV", "/jev/operations", "duplicate operation entries");
+  // ---- platform tokens (opaque; ownership unresolved) ----
+  const allowedCaps = new Set(spec.capabilities.allow.map((c) => c.id));
+  for (const x of spec.capabilities.deny ?? []) if (allowedCaps.has(x)) err("E_CAP_CONFLICT", "/spec/capabilities", `${x} is both allowed and denied`);
+  Object.keys(spec.concurrency.perCapability ?? {}).forEach((k) => { if (!allowedCaps.has(k)) err("E_CAP_UNDECLARED", `/spec/concurrency/perCapability/${k}`, `${k} is not in capabilities.allow`); });
+  const declaredGw = new Map(spec.compatibility.gatewayContracts.map((g) => [g.id, g]));
+  for (const [gid, where] of [[spec.jev.gateway.contract, "/spec/jev/gateway/contract"], [spec.state.store, "/spec/state/store"], [spec.evidence.sink, "/spec/evidence/sink"]]) {
+    if (!declaredGw.has(gid)) err("E_GATEWAY_COMPAT", where, `${gid} must be listed in spec.compatibility.gatewayContracts`);
+  }
+  for (const g of spec.compatibility.gatewayContracts) if (!semver.validRange(g.version)) err("E_RANGE", "/spec/compatibility/gatewayContracts", `invalid semver range "${g.version}"`);
+  if (!semver.validRange(spec.jev.gateway.version)) err("E_RANGE", "/spec/jev/gateway/version", `invalid semver range "${spec.jev.gateway.version}"`);
+  if (!semver.validRange(spec.compatibility.runtime.version)) err("E_RANGE", "/spec/compatibility/runtime/version", "invalid semver range");
+  if (!spec.jev.gateway.contract.includes("jev")) warn("W_JEV_CONTRACT", "/spec/jev/gateway/contract", "System-1 contract token does not mention jev");
 
-  // Safety invariants
-  const hitlHas = (w) => bp.hitl.approvals.some((a) => a.when === w);
-  bp.capabilities.allow.forEach((c, i) => {
-    if (c.scopes.includes("external-send") && !c.requiresHitl && !hitlHas("external-send")) err("E_HITL", `/capabilities/allow/${i}`, "external-send scope requires requiresHitl or a hitl approval with when: external-send");
-  });
-  if (bp.purpose.taskClasses.some((t) => ["high", "critical"].includes(t.risk)) && bp.planning.review.humanApproval === "never" && !hitlHas("risk-at-least-high")) err("E_HITL", "/planning/review/humanApproval", "high-risk task classes need human approval (planning.review.humanApproval or hitl risk-at-least-high)");
-  if (bp.checkpointing.rollback?.allowed && bp.checkpointing.rollback.sideEffects === "ignore") warn("W_ROLLBACK", "/checkpointing/rollback/sideEffects", "rollback ignoring side effects is unsafe for write capabilities");
+  // ---- security metadata: declared, never silently altered ----
+  const secCaps = new Set(bp.security.capabilities);
+  for (const c of allowedCaps) if (!secCaps.has(c)) err("E_SECURITY", "/security/capabilities", `spec.capabilities.allow grants ${c} but security.capabilities does not declare it`);
+  for (const c of secCaps) if (!allowedCaps.has(c)) err("E_SECURITY", "/security/capabilities", `security.capabilities declares ${c} which spec does not grant`);
+  const cls = classRank(bp.security.classification);
+  if (classRank(spec.jev.dataHandling?.maxClassification ?? "public") > cls) err("E_SECURITY", "/security/classification", "declared classification is lower than spec.jev.dataHandling.maxClassification");
+  spec.capabilities.allow.forEach((c, i) => { if (classRank(c.constraints?.dataClassificationMax ?? "public") > cls) err("E_SECURITY", `/security/classification`, `declared classification is lower than capability ${c.id} dataClassificationMax (allow/${i})`); });
 
-  // provenance
-  if (!bp.provenance.authors.some((a) => a.type === "human")) err("E_PROVENANCE", "/provenance/authors", "at least one human author/approver is required (a QB never authors its own canonical definition)");
-  if (bp.provenance.origin === "wisdom-of-compute" && bp.provenance.parent && bp.provenance.parent.slice(0, bp.provenance.parent.indexOf("@")) !== bp.id) err("E_PARENT", "/provenance/parent", "parent must be a version of the same QB");
+  // ---- QB-specific internal consistency (semantics unchanged) ----
+  const o = spec.orchestration;
+  if (!o.allowedStrategies.includes(o.defaultStrategy)) err("E_STRATEGY", "/spec/orchestration/defaultStrategy", "default strategy must be in allowedStrategies");
+  if (o.allowedStrategies.includes("swarm") && !spec.swarm.enabled) err("E_SWARM", "/spec/orchestration/allowedStrategies", "swarm strategy allowed but swarm.enabled is false");
+  if (spec.delegation.rules.some((r) => r.action === "swarm") && !spec.swarm.enabled) err("E_SWARM", "/spec/delegation/rules", "a rule requests swarm but swarm.enabled is false");
+  const ta = spec.delegation.tinyAgents;
+  if (!ta.allowCompile && spec.delegation.rules.some((r) => r.action === "compile-tiny-agent")) err("E_TINY", "/spec/delegation/rules", "a rule compiles Tiny Agents but tinyAgents.allowCompile is false");
+  if (!ta.allowCompile && spec.delegation.fallback === "compile-tiny-agent") err("E_TINY", "/spec/delegation/fallback", "fallback compiles Tiny Agents but allowCompile is false");
+  const perRun = spec.budgets.perRun;
+  if (perRun.maxTinyAgents !== undefined && ta.maxPerRun > perRun.maxTinyAgents) err("E_BUDGET", "/spec/delegation/tinyAgents/maxPerRun", "exceeds budgets.perRun.maxTinyAgents");
+  if (perRun.maxTinyAgents !== undefined && spec.concurrency.maxParallelTinyAgents > perRun.maxTinyAgents) warn("W_BUDGET", "/spec/concurrency/maxParallelTinyAgents", "exceeds budgets.perRun.maxTinyAgents (never reachable)");
+  if (spec.swarm.enabled && spec.swarm.maxSize > ta.maxPerRun && ta.allowCompile) err("E_BUDGET", "/spec/swarm/maxSize", "swarm size exceeds tinyAgents.maxPerRun");
+  if (spec.swarm.enabled && perRun.maxTinyAgents !== undefined && spec.swarm.maxSize > perRun.maxTinyAgents) err("E_BUDGET", "/spec/swarm/maxSize", "swarm size exceeds budgets.perRun.maxTinyAgents");
+  const hitlHas = (w) => spec.hitl.approvals.some((a) => a.when === w);
+  if (spec.swarm.enabled && spec.swarm.requiresHitlAbove !== undefined && !hitlHas("swarm-above-threshold")) err("E_HITL", "/spec/swarm/requiresHitlAbove", "needs a hitl approval with when: swarm-above-threshold");
+  if (spec.replanning.triggers.includes("budget-pressure") && spec.budgets.softLimitRatio === undefined) err("E_BUDGET", "/spec/budgets/softLimitRatio", "budget-pressure trigger requires softLimitRatio");
+  if (!spec.checkpointing.triggers.includes("before-hitl") && spec.hitl.approvals.length) warn("W_CHECKPOINT", "/spec/checkpointing/triggers", "HITL approvals exist but checkpointing lacks before-hitl");
+  if (spec.context.handoff.maxContextTokens > spec.context.maxWorkingTokens) warn("W_CONTEXT", "/spec/context/handoff/maxContextTokens", "handoff limit exceeds working context");
+  const jevOp = (op) => spec.jev.operations.find((x) => x.op === op)?.mode ?? "disabled";
+  if (spec.planning.review.systemOneCritique && jevOp("critique") === "disabled") err("E_JEV", "/spec/planning/review/systemOneCritique", "requires jev operation `critique` to be enabled");
+  const evals = [...(spec.evaluation.intermediate.evaluators ?? []), ...spec.evaluation.final.evaluators];
+  if (evals.some((e) => e.kind === "system-one") && jevOp("evaluate") === "disabled") err("E_JEV", "/spec/evaluation", "system-one evaluators require jev operation `evaluate`");
+  if (spec.delegation.executionAgents.selection === "system-one-routed" && jevOp("route") === "disabled") err("E_JEV", "/spec/delegation/executionAgents/selection", "system-one-routed requires jev operation `route`");
+  if (spec.jev.onUnavailable === "degrade-to-local-heuristics" && spec.jev.operations.some((x) => x.mode === "required")) warn("W_JEV", "/spec/jev/onUnavailable", "required operations degrade to local heuristics when Jev is unavailable; confirm this is intended");
+  if (new Set(spec.jev.operations.map((x) => x.op)).size !== spec.jev.operations.length) err("E_JEV", "/spec/jev/operations", "duplicate operation entries");
+  spec.capabilities.allow.forEach((c, i) => { if (c.scopes.includes("external-send") && !c.requiresHitl && !hitlHas("external-send")) err("E_HITL", `/spec/capabilities/allow/${i}`, "external-send scope requires requiresHitl or a hitl approval with when: external-send"); });
+  if (spec.purpose.taskClasses.some((t) => ["high", "critical"].includes(t.risk)) && spec.planning.review.humanApproval === "never" && !hitlHas("risk-at-least-high")) err("E_HITL", "/spec/planning/review/humanApproval", "high-risk task classes need human approval");
+  if (spec.checkpointing.rollback?.allowed && spec.checkpointing.rollback.sideEffects === "ignore") warn("W_ROLLBACK", "/spec/checkpointing/rollback/sideEffects", "rollback ignoring side effects is unsafe for write capabilities");
 
-  // IO contracts must be valid JSON Schema and scenario inputs must satisfy them
   let inputValidator;
   try {
-    inputValidator = new Ajv2020({ strict: false, allErrors: true }).compile(bp.contracts.input.schema);
-    new Ajv2020({ strict: false }).compile(bp.contracts.output.schema);
-  } catch (e) { err("E_IO_SCHEMA", "/contracts", `invalid JSON Schema: ${e.message}`); }
+    inputValidator = new Ajv2020({ strict: false, allErrors: true }).compile(spec.contracts.input.schema);
+    new Ajv2020({ strict: false }).compile(spec.contracts.output.schema);
+  } catch (e) { err("E_IO_SCHEMA", "/spec/contracts", `invalid JSON Schema: ${e.message}`); }
 
-  // ---- synthetic / example data hygiene ----
-  const isExample = bp.metadata.labels?.example === "true";
-  const SYN_STORE = "evidence://synthetic-example/";
-  const synUris = [...(bp.provenance.derivedFrom?.evidenceRefs ?? []), ...(bp.provenance.derivedFrom?.evalRuns ?? [])];
-  if (isExample) {
-    if (bp.metadata.labels.synthetic !== "true") err("E_SYNTHETIC", "/metadata/labels", 'example blueprints must carry labels.synthetic: "true"');
-    if (!bp.metadata.name.startsWith("[EXAMPLE]")) err("E_SYNTHETIC", "/metadata/name", 'example blueprint names must start with "[EXAMPLE]"');
-    synUris.forEach((u) => { if (!u.startsWith(SYN_STORE)) err("E_SYNTHETIC", "/provenance/derivedFrom", `example blueprint references non-synthetic evidence ${u}`); });
+  // ---- origin / provenance (WoC requirements preserved) ----
+  const origin = md.origin;
+  if (origin.type !== "evolved" && origin.evolution) err("E_ORIGIN", "/metadata/origin", "evolution is only valid for origin.type: evolved");
+  if (!bp.provenance.authors.some((a) => a.type === "human")) err("E_PROVENANCE", "/provenance/authors", "at least one human author/approver is required (a QB never authors its own canonical definition)");
+  for (const s of origin.evolution?.sourceRefs ?? []) {
+    if (!bp.provenance.sourceRefs.some((p) => p.registry === s.registry && p.id === s.id && p.version === s.version)) err("E_PROVENANCE", "/provenance/sourceRefs", `origin.evolution.sourceRefs ${s.id}@${s.version} must also appear in provenance.sourceRefs`);
+    if (s.registry !== REGISTRY || s.id !== id) err("E_PARENT", "/metadata/origin/evolution/sourceRefs", "a QB evolves only from versions of the same QB identity");
+  }
+  const woc = bp.provenance.transformations.filter((t) => t.kind === "wisdom-of-compute");
+  if (woc.length && origin.type !== "evolved") err("E_ORIGIN", "/provenance/transformations", "a wisdom-of-compute transformation requires origin.type: evolved");
+
+  // ---- synthetic / example data protection ----
+  const synUri = (u) => u.startsWith(SYN_STORE);
+  const allUris = [
+    ...bp.provenance.transformations.flatMap((t) => [...(t.evidenceRefs ?? []), ...(t.evalRuns ?? [])]),
+    ...bp.attestations.map((a) => a.ref), ...bp.security.approvals.flatMap((a) => (a.ref ? [a.ref] : [])),
+  ];
+  if (isSynthetic) {
+    if (!md.name.startsWith("[EXAMPLE]")) err("E_SYNTHETIC", "/metadata/name", 'synthetic artifact names must start with "[EXAMPLE]"');
+    allUris.forEach((u) => { if (!synUri(u)) err("E_SYNTHETIC", "/", `synthetic artifact references non-synthetic evidence ${u}`); });
+    bp.attestations.forEach((a, i) => { if (a.synthetic !== true) err("E_SYNTHETIC", `/attestations/${i}`, "synthetic artifacts may only carry synthetic attestations"); });
   } else {
-    synUris.forEach((u) => { if (u.startsWith(SYN_STORE)) err("E_SYNTHETIC", "/provenance/derivedFrom", "real blueprint references synthetic evidence"); });
+    allUris.forEach((u) => { if (synUri(u)) err("E_SYNTHETIC", "/", "production artifact references synthetic evidence"); });
+    bp.attestations.forEach((a, i) => { if (a.synthetic !== false || synUri(a.ref)) err("E_SYNTHETIC", `/attestations/${i}`, "production attestations must be non-synthetic"); });
   }
-  if (v.suite && typeof v.suite.synthetic === "boolean" && v.suite.synthetic !== isExample) err("E_SYNTHETIC", "/synthetic", isExample ? "example blueprints must ship a synthetic suite (synthetic: true)" : "synthetic suites are only allowed for example blueprints", "evals/suite.yaml");
-  if (v.suite && isExample) (v.suite.datasets ?? []).forEach((ds) => { if (!ds.id.startsWith("dataset:synthetic-example/")) err("E_SYNTHETIC", "/datasets", `example suites may only use dataset:synthetic-example/* (got ${ds.id})`, "evals/suite.yaml"); });
-  (v.refs?.refs ?? []).forEach((r) => {
-    const inSynStore = r.uri.startsWith(SYN_STORE);
-    if (typeof r.synthetic === "boolean" && (r.synthetic !== inSynStore)) err("E_SYNTHETIC", `/refs/${r.id}`, "synthetic flag and evidence://synthetic-example/ store must agree", "evidence/refs.yaml");
-    if (r.synthetic === true && !isExample) err("E_SYNTHETIC", `/refs/${r.id}`, "synthetic evidence is only allowed for example blueprints", "evidence/refs.yaml");
-    if (isExample && r.synthetic !== true) err("E_SYNTHETIC", `/refs/${r.id}`, "example blueprints may only carry synthetic evidence refs", "evidence/refs.yaml");
-    if (r.synthetic === true && !r.summary.startsWith("SYNTHETIC EXAMPLE")) err("E_SYNTHETIC", `/refs/${r.id}/summary`, 'synthetic evidence summaries must start with "SYNTHETIC EXAMPLE"', "evidence/refs.yaml");
-  });
+  bp.attestations.forEach((a, i) => { if (a.synthetic === true && !a.summary.startsWith("SYNTHETIC EXAMPLE")) err("E_SYNTHETIC", `/attestations/${i}/summary`, 'synthetic summaries must start with "SYNTHETIC EXAMPLE"'); });
 
-  // ---- lifecycle artifacts ----
-  const status = bp.lifecycle.status;
-  const sealed = SEALED.has(status);
-  const atLeastCandidate = STATUS_ORDER.indexOf(status) >= 1;
-  if (bp.lifecycle.deprecation && status !== "deprecated" && status !== "retired") err("E_LIFECYCLE", "/lifecycle/deprecation", "deprecation block only valid for deprecated/retired");
-  if ((status === "deprecated" || status === "retired") && !bp.lifecycle.deprecation) err("E_LIFECYCLE", "/lifecycle", "deprecated/retired versions need a deprecation block");
+  // ---- digest-bound attestations and approvals ----
+  bp.attestations.forEach((a, i) => { if (a.subjectDigest !== digest) err("E_ATTESTATION_STALE", `/attestations/${i}/subjectDigest`, `attestation binds ${a.subjectDigest} but the artifact digest is ${digest}; re-assess the current content`); });
+  bp.security.approvals.forEach((a, i) => { if (a.subjectDigest !== digest) err("E_APPROVAL_STALE", `/security/approvals/${i}/subjectDigest`, `approval binds ${a.subjectDigest} but the artifact digest is ${digest}`); });
 
-  if (atLeastCandidate) {
-    if (!v.suite) err("E_SUITE", "", "candidate and later require evals/suite.yaml", "evals/suite.yaml");
-  }
+  // ---- evaluation suite ----
   if (v.suite) {
     for (const m of schemaErrors("suite", v.suite)) err("E_SCHEMA", "", m, "evals/suite.yaml");
     if (!errors.some((e) => e.file === file("evals/suite.yaml"))) {
       const s = v.suite;
-      if (s.for !== `${bp.id}@${bp.version}`) err("E_SUITE", "/for", `suite targets ${s.for}, expected ${bp.id}@${bp.version}`, "evals/suite.yaml");
+      if (s.metadata.id !== id || s.metadata.version !== md.version) err("E_SUITE", "/metadata", `suite targets ${s.metadata.id}@${s.metadata.version}, expected ${id}@${md.version}`, "evals/suite.yaml");
+      if (s.synthetic !== isSynthetic) err("E_SYNTHETIC", "/synthetic", isSynthetic ? "synthetic artifacts must ship a synthetic suite" : "synthetic suites are only allowed for synthetic artifacts", "evals/suite.yaml");
+      if (isSynthetic) (s.datasets ?? []).forEach((ds) => { if (!ds.id.startsWith("dataset:synthetic-example/")) err("E_SYNTHETIC", "/datasets", `synthetic suites may only use dataset:synthetic-example/* (got ${ds.id})`, "evals/suite.yaml"); });
       const graders = new Set(s.graders.map((g) => g.id));
       if (graders.size !== s.graders.length) err("E_SUITE", "/graders", "duplicate grader ids", "evals/suite.yaml");
       const sc = new Set();
@@ -288,211 +276,266 @@ export function validateVersion(v, ctx) {
         if (sc.has(x.id)) err("E_SUITE", `/scenarios/${i}`, `duplicate scenario id ${x.id}`, "evals/suite.yaml");
         sc.add(x.id);
         x.graders.forEach((g) => { if (!graders.has(g)) err("E_SUITE", `/scenarios/${i}/graders`, `unknown grader ${g}`, "evals/suite.yaml"); });
-        if (inputValidator && !inputValidator(x.input)) err("E_SUITE", `/scenarios/${i}/input`, `input violates contracts.input.schema: ${inputValidator.errors.map((e) => `${e.instancePath} ${e.message}`).join("; ")}`, "evals/suite.yaml");
+        if (inputValidator && !inputValidator(x.input)) err("E_SUITE", `/scenarios/${i}/input`, `input violates spec.contracts.input.schema: ${inputValidator.errors.map((e) => `${e.instancePath} ${e.message}`).join("; ")}`, "evals/suite.yaml");
       });
       const metrics = new Set(s.metrics.map((m) => m.id));
       for (const [gate, list] of Object.entries(s.gates)) for (const c of list) if (!metrics.has(c.metric)) err("E_SUITE", `/gates/${gate}`, `gate references unknown metric ${c.metric}`, "evals/suite.yaml");
-      if (s.baseline && bp.provenance.parent && s.baseline.ref !== bp.provenance.parent) warn("W_SUITE", "/baseline", "baseline differs from provenance.parent", "evals/suite.yaml");
-      if (bp.provenance.parent && !s.baseline) warn("W_SUITE", "/baseline", "a version with a parent should declare a baseline", "evals/suite.yaml");
+      const parent = origin.evolution?.sourceRefs?.[0];
+      if (s.baseline && parent && (s.baseline.ref.id !== parent.id || s.baseline.ref.version !== parent.version)) warn("W_SUITE", "/baseline", "baseline differs from origin.evolution.sourceRefs[0]", "evals/suite.yaml");
+      if (parent && !s.baseline) warn("W_SUITE", "/baseline", "an evolved version should declare a baseline", "evals/suite.yaml");
     }
-  }
+  } else if (bp.attestations.some((a) => a.type === "evaluation")) err("E_SUITE", "", "evaluation attestations require evals/suite.yaml", "evals/suite.yaml");
 
+  // every passing evaluation attestation must actually meet the gate it claims
+  bp.attestations.forEach((a, i) => {
+    if (a.type !== "evaluation" || a.result !== "pass" || !v.suite?.gates?.[a.gate]) return;
+    for (const c of v.suite.gates[a.gate]) {
+      const val = a.metrics?.[c.metric];
+      const ok = val !== undefined && ({ ">=": val >= c.value, ">": val > c.value, "<=": val <= c.value, "<": val < c.value, "==": val === c.value })[c.op];
+      if (!ok) err("E_GATE", `/attestations/${i}`, `evaluation claims pass for gate ${a.gate} but ${c.metric} ${c.op} ${c.value} is not met (got ${val})`);
+    }
+  });
+
+  // ---- evidence pointers ----
   if (v.refs) {
     for (const m of schemaErrors("refs", v.refs)) err("E_SCHEMA", "", m, "evidence/refs.yaml");
     if (!errors.some((e) => e.file === file("evidence/refs.yaml"))) {
-      if (v.refs.for !== `${bp.id}@${bp.version}`) err("E_EVIDENCE", "/for", `refs target ${v.refs.for}`, "evidence/refs.yaml");
-      const ids = new Set();
-      for (const r of v.refs.refs) { if (ids.has(r.id)) err("E_EVIDENCE", "/refs", `duplicate evidence id ${r.id}`, "evidence/refs.yaml"); ids.add(r.id); }
+      if (v.refs.metadata.id !== id || v.refs.metadata.version !== md.version) err("E_EVIDENCE", "/metadata", "evidence refs target a different artifact version", "evidence/refs.yaml");
+      const seen = new Set();
+      v.refs.refs.forEach((r) => {
+        if (seen.has(r.id)) err("E_EVIDENCE", "/refs", `duplicate evidence id ${r.id}`, "evidence/refs.yaml");
+        seen.add(r.id);
+        if (r.synthetic !== synUri(r.uri)) err("E_SYNTHETIC", `/refs/${r.id}`, "synthetic flag and evidence://synthetic-example/ store must agree", "evidence/refs.yaml");
+        if (r.synthetic !== isSynthetic) err("E_SYNTHETIC", `/refs/${r.id}`, isSynthetic ? "synthetic artifacts may only carry synthetic evidence refs" : "production artifacts cannot carry synthetic evidence", "evidence/refs.yaml");
+        if (r.synthetic && !r.summary.startsWith("SYNTHETIC EXAMPLE")) err("E_SYNTHETIC", `/refs/${r.id}/summary`, 'synthetic summaries must start with "SYNTHETIC EXAMPLE"', "evidence/refs.yaml");
+      });
     }
   }
 
-  const digest = blueprintDigest(bp);
-  v.digest = digest;
-  if (!sealed && v.release) err("E_RELEASE", "", "release.yaml present on an unsealed version (draft/candidate)", "release.yaml");
-  if (sealed) {
-    if (!v.release) err("E_RELEASE", "", `${status} versions must be sealed (run npm run seal)`, "release.yaml");
+  // ---- lifecycle overlay (append-only; independent of maturity and origin) ----
+  let effective = "active";
+  if (v.overlay) {
+    for (const m of schemaErrors("lifecycle", v.overlay)) err("E_SCHEMA", "", m, "lifecycle.yaml");
+    if (!errors.some((e) => e.file === file("lifecycle.yaml"))) {
+      if (v.overlay.metadata.id !== id || v.overlay.metadata.version !== md.version) err("E_LIFECYCLE", "/metadata", "overlay targets a different artifact version", "lifecycle.yaml");
+      let prev = null;
+      for (const [i, e] of v.overlay.entries.entries()) {
+        if (i === 0 && e.state !== "active") err("E_LIFECYCLE", "/entries/0", "the first overlay entry must be `active`", "lifecycle.yaml");
+        if (prev && !LIFECYCLE_TRANSITIONS[prev].includes(e.state)) err("E_LIFECYCLE", `/entries/${i}`, `illegal lifecycle transition ${prev} -> ${e.state}`, "lifecycle.yaml");
+        if (prev && new Date(e.at) < new Date(v.overlay.entries[i - 1].at)) err("E_LIFECYCLE", `/entries/${i}`, "overlay entries must be in chronological order", "lifecycle.yaml");
+        prev = e.state;
+      }
+      effective = prev ?? "active";
+    }
+  }
+  if (md.lifecycle !== effective) err("E_LIFECYCLE", "/metadata/lifecycle", `metadata.lifecycle is ${md.lifecycle} but the lifecycle overlay's effective state is ${effective}`);
+
+  // ---- maturity ----
+  if (md.maturity === "candidate") {
+    if (v.release) err("E_RELEASE", "", "release record present on a candidate", "release.yaml");
+  } else {
+    if (!v.release) err("E_RELEASE", "", "canonical versions require a release record (npm run seal)", "release.yaml");
     else {
       for (const m of schemaErrors("release", v.release)) err("E_SCHEMA", "", m, "release.yaml");
-      if (v.release.id !== `${bp.id}@${bp.version}`) err("E_RELEASE", "/id", "release id mismatch", "release.yaml");
-      if (v.release.blueprintDigest !== digest) err("E_DIGEST", "/blueprintDigest", `blueprint changed after sealing (expected ${v.release.blueprintDigest}, got ${digest})`, "release.yaml");
-      if (v.suite && v.release.suiteDigest !== suiteDigest(v.suite)) err("E_DIGEST", "/suiteDigest", "evaluation suite changed after sealing", "release.yaml");
+      if (v.release.metadata?.id !== id || v.release.metadata?.version !== md.version) err("E_RELEASE", "/metadata", "release record identity mismatch", "release.yaml");
+      if (v.release.digest !== digest) err("E_DIGEST", "/digest", `artifact changed after release (release ${v.release.digest}, computed ${digest})`, "release.yaml");
+      if (v.suite && v.release.suiteDigest !== suiteDigest(v.suite)) err("E_DIGEST", "/suiteDigest", "evaluation suite changed after release", "release.yaml");
     }
-    // promotion evidence: a passing eval-run for the exact digest that meets the gate for the status
-    const gateFor = status === "stable" ? "stable" : "canary";
-    const passing = (v.refs?.refs ?? []).filter((r) => r.type === "eval-run" && r.result === "pass" && r.blueprintDigest === digest);
-    if (status === "canary" || status === "stable") {
-      const required = status === "canary" ? ["canary"] : ["canary", "stable"];
-      for (const g of required) {
-        if (!passing.some((r) => r.gate === g)) err("E_PROMOTION", "", `no passing eval-run for gate "${g}" against digest ${digest}`, "evidence/refs.yaml");
-      }
-      const run = passing.find((r) => r.gate === gateFor);
-      if (run) for (const c of v.suite?.gates?.[gateFor] ?? []) {
-        const val = run.metrics?.[c.metric];
-        const ok = val !== undefined && ({ ">=": val >= c.value, ">": val > c.value, "<=": val <= c.value, "<": val < c.value, "==": val === c.value })[c.op];
-        if (!ok) err("E_GATE", "", `eval-run "${run.id}" fails gate ${gateFor}: ${c.metric} ${c.op} ${c.value} (got ${val})`, "evidence/refs.yaml");
-      }
-    }
+    if (!v.suite) err("E_SUITE", "", "canonical versions require evals/suite.yaml", "evals/suite.yaml");
+    if (!bp.attestations.some((a) => a.type === "evaluation" && a.gate === "canonical" && a.result === "pass" && a.subjectDigest === digest)) err("E_PROMOTION", "/attestations", "canonical requires a passing evaluation attestation for gate `canonical` bound to the current digest");
+    if (!bp.security.approvals.some((a) => a.type === "security-review" && a.actor.type === "human" && a.subjectDigest === digest)) err("E_PROMOTION", "/security/approvals", "canonical requires a human security-review approval bound to the current digest");
+    if (!bp.security.approvals.some((a) => a.type === "release-approval" && a.actor.type === "human" && a.subjectDigest === digest)) err("E_PROMOTION", "/security/approvals", "canonical requires a human release-approval bound to the current digest");
   }
 
-  // ---- peer registry resolution (optional, offline-safe) ----
-  for (const d of bp.dependencies) {
-    const peers = ctx.peers.filter((p) => p.id === d.id);
-    if (!ctx.peers.length) continue;
-    const range = semver.validRange(d.version);
-    const matches = range ? peers.filter((p) => semver.satisfies(p.version, range, { includePrerelease: true }) && p.status !== "retired") : [];
-    if (!matches.length) { (d.optional ? warn : err)("E_UNRESOLVED", `/dependencies/${d.id}`, `no non-retired ${d.id} satisfies ${d.version} in peer indexes`); continue; }
-    if (status === "stable" && !d.optional && !matches.some((p) => p.status === "stable")) err("E_UNRESOLVED", `/dependencies/${d.id}`, `stable QB requires a stable ${d.id} satisfying ${d.version}`);
-    if (d.digest && !matches.some((p) => p.digest === d.digest)) err("E_DIGEST", `/dependencies/${d.id}`, "pinned digest matches no resolvable version");
+  // ---- peer resolution (optional, offline-safe, local index files only) ----
+  if (ctx.peers.length) {
+    for (const r of bp.references) {
+      const range = semver.validRange(r.version);
+      const cand = ctx.peers.filter((p) => p.registry === r.registry && p.id === r.id && range && semver.satisfies(p.version, range, { includePrerelease: true }) && p.lifecycle !== "revoked");
+      if (!cand.length) { (r.optional ? warn : err)("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, `no non-revoked ${r.registry}/${r.id} satisfies ${r.version} in the supplied indexes`); continue; }
+      if (md.maturity === "canonical" && !r.optional && !cand.some((p) => p.maturity === "canonical")) err("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, "a canonical QB requires canonical dependencies");
+      if (r.digest && !cand.some((p) => p.digest === r.digest)) err("E_DIGEST", `/references/${r.registry}/${r.id}`, "pinned digest matches no resolvable version");
+    }
   }
 }
 
-/** Cross-version rules: parent linkage, semver bumps, permission widening. */
+/** Cross-version rules: candidate ordering, lineage, semver bumps, permission widening. */
 export function validateLineage(all) {
-  const byKey = new Map(all.filter((v) => v.blueprint && !v.errors.some((e) => e.code === "E_SCHEMA")).map((v) => [`${v.blueprint.id}@${v.blueprint.version}`, v]));
-  for (const v of byKey.values()) {
-    const bp = v.blueprint;
+  const ok = all.filter((v) => v.blueprint && !v.errors.some((e) => e.code === "E_SCHEMA"));
+  const byKey = new Map(ok.map((v) => [`${v.blueprint.metadata.id}@${v.blueprint.metadata.version}`, v]));
+  for (const v of ok) {
+    const bp = v.blueprint, id = bp.metadata.id, ver = bp.metadata.version;
     const err = (code, where, message) => v.errors.push({ code, file: `${v.rel}/blueprint.yaml`, where, message });
     const warn = (code, where, message) => v.warnings.push({ code, file: `${v.rel}/blueprint.yaml`, where, message });
-    const parentRef = bp.provenance.parent;
-    const siblings = all.filter((x) => x.blueprint?.id === bp.id && x !== v);
-    if (!parentRef) {
-      if (siblings.length && semver.valid(bp.version) && siblings.some((s) => semver.lt(s.blueprint.version, bp.version))) warn("W_LINEAGE", "/provenance/parent", "later version without provenance.parent");
-      continue;
+    if (bp.metadata.maturity === "candidate") {
+      for (const o of ok) if (o !== v && o.blueprint.metadata.id === id && o.blueprint.metadata.maturity === "canonical" && semver.lte(ver, o.blueprint.metadata.version)) err("E_CANDIDATE_VERSION", "/metadata/version", `a candidate must exceed every canonical version of ${id}; ${o.blueprint.metadata.version} is canonical`);
     }
-    const parent = byKey.get(parentRef);
-    if (!parent) { err("E_PARENT", "/provenance/parent", `parent ${parentRef} not found in this registry`); continue; }
-    const pv = parent.blueprint.version;
-    if (!semver.gt(bp.version, pv)) { err("E_SEMVER", "/version", `version must be greater than parent ${pv}`); continue; }
-    const diff = semver.diff(pv, bp.version);
+    const src = bp.metadata.origin.evolution?.sourceRefs?.[0];
+    if (!src) continue;
+    const parent = byKey.get(`${src.id}@${src.version}`);
+    if (!parent) { err("E_PARENT", "/metadata/origin/evolution/sourceRefs", `source ${src.id}@${src.version} not found in this registry`); continue; }
+    if (src.digest && src.digest !== parent.digest) err("E_DIGEST", "/metadata/origin/evolution/sourceRefs", "source digest does not match the source version's digest");
+    const pv = parent.blueprint.metadata.version;
+    if (!semver.gt(ver, pv)) { err("E_SEMVER", "/metadata/version", `version must be greater than source ${pv}`); continue; }
+    const diff = semver.diff(pv, ver);
     const major = diff === "major" || diff === "premajor";
     const patchOnly = ["patch", "prepatch", "prerelease"].includes(diff);
-    if (bp.compatibility.breaking?.length && !major) err("E_SEMVER", "/compatibility/breaking", "breaking changes declared but major version not bumped");
-    if (canonicalize(bp.contracts) !== canonicalize(parent.blueprint.contracts)) {
-      if (patchOnly) err("E_SEMVER", "/contracts", "input/output contract changed: at least a minor bump is required");
-      else if (!major) warn("W_SEMVER", "/contracts", "contract changed in a minor bump: ensure it is backward compatible, otherwise bump major and list compatibility.breaking");
+    if (bp.spec.compatibility.breaking?.length && !major) err("E_SEMVER", "/spec/compatibility/breaking", "breaking changes declared but major version not bumped");
+    if (canonicalize(bp.spec.contracts) !== canonicalize(parent.blueprint.spec.contracts)) {
+      if (patchOnly) err("E_SEMVER", "/spec/contracts", "input/output contract changed: at least a minor bump is required");
+      else if (!major) warn("W_SEMVER", "/spec/contracts", "contract changed in a minor bump: ensure it is backward compatible, otherwise bump major and list compatibility.breaking");
     }
     const widening = detectWidening(parent.blueprint, bp);
     if (widening.length) {
       widening.forEach((w) => warn("W_PERMISSION_WIDENING", "", `${w} (security review required)`));
-      if (patchOnly) err("E_SEMVER", "/version", "permission/budget widening requires at least a minor bump");
+      if (patchOnly) err("E_SEMVER", "/metadata/version", "permission/budget widening requires at least a minor bump");
     }
   }
 }
 
 export function detectWidening(a, b) {
-  const out = [];
-  const capMap = (bp) => new Map(bp.capabilities.allow.map((c) => [c.id, new Set(c.scopes)]));
-  const ca = capMap(a);
-  for (const [id, scopes] of capMap(b)) {
-    if (!ca.has(id)) out.push(`new capability ${id}`);
-    else for (const s of scopes) if (!ca.get(id).has(s)) out.push(`capability ${id} gains scope ${s}`);
+  const out = [], A = a.spec, B = b.spec;
+  const capMap = (s) => new Map(s.capabilities.allow.map((c) => [c.id, new Set(c.scopes)]));
+  const ca = capMap(A);
+  for (const [cid, scopes] of capMap(B)) {
+    if (!ca.has(cid)) out.push(`new capability ${cid}`);
+    else for (const s of scopes) if (!ca.get(cid).has(s)) out.push(`capability ${cid} gains scope ${s}`);
   }
   for (const k of ["maxCostUsd", "maxTokens", "maxToolCalls", "maxDelegations", "maxTinyAgents"]) {
-    const x = a.budgets.perRun[k], y = b.budgets.perRun[k];
+    const x = A.budgets.perRun[k], y = B.budgets.perRun[k];
     if (y !== undefined && (x === undefined || y > x)) out.push(`budget ${k} raised`);
   }
-  if (a.hitl.approvals.some((h) => !b.hitl.approvals.some((n) => n.when === h.when))) out.push("HITL approval removed");
-  if (!a.swarm.enabled && b.swarm.enabled) out.push("swarm enabled");
-  if (a.swarm.enabled && b.swarm.enabled && b.swarm.maxSize > a.swarm.maxSize) out.push("swarm maxSize raised");
-  if (!a.delegation.tinyAgents.allowCompile && b.delegation.tinyAgents.allowCompile) out.push("Tiny Agent compilation enabled");
-  for (const id of b.delegation.executionAgents.allow) if (!a.delegation.executionAgents.allow.includes(id)) out.push(`new execution agent ${id}`);
-  const rank = ["public", "internal", "confidential", "restricted"];
-  const ra = rank.indexOf(a.jev.dataHandling?.maxClassification ?? "public"), rb = rank.indexOf(b.jev.dataHandling?.maxClassification ?? "public");
-  if (rb > ra) out.push("Jev data classification ceiling raised");
+  if (A.hitl.approvals.some((h) => !B.hitl.approvals.some((n) => n.when === h.when))) out.push("HITL approval removed");
+  if (!A.swarm.enabled && B.swarm.enabled) out.push("swarm enabled");
+  if (A.swarm.enabled && B.swarm.enabled && B.swarm.maxSize > A.swarm.maxSize) out.push("swarm maxSize raised");
+  if (!A.delegation.tinyAgents.allowCompile && B.delegation.tinyAgents.allowCompile) out.push("Tiny Agent compilation enabled");
+  for (const x of B.delegation.executionAgents.allow) if (!A.delegation.executionAgents.allow.includes(x)) out.push(`new execution agent ${x}`);
+  if (classRank(B.jev.dataHandling?.maxClassification ?? "public") > classRank(A.jev.dataHandling?.maxClassification ?? "public")) out.push("Jev data classification ceiling raised");
+  if (classRank(b.security.classification) > classRank(a.security.classification)) out.push("declared security classification raised");
   return out;
 }
 
 // ---------- top-level ----------
-export function loadRegistriesConfig() {
+export function loadRegistries() {
   const cfg = readYaml(path.join(PKG_ROOT, "registries.yaml"));
-  return new Set(Object.keys(cfg.kinds));
+  return new Set(Object.keys(cfg.registries));
+}
+export function loadPeerIndexes(files = []) {
+  return files.flatMap((f) => { const idx = JSON.parse(fs.readFileSync(f, "utf8")); return idx.entries ?? idx; });
 }
 
-export function loadPeerIndexes(files = []) {
-  return files.flatMap((f) => {
-    const idx = JSON.parse(fs.readFileSync(f, "utf8"));
-    return idx.entries ?? idx;
-  });
+const RUNTIME_ARTIFACT_RE = /\.(jsonl|ndjson|tape|har)$/i;
+const RUNTIME_DIR_RE = /^(tapes?|trajector(y|ies)|sessions|traces)$/i;
+/** Repo-wide scan: raw runtime artifacts must never be committed. */
+export function scanRuntimeArtifacts(root) {
+  const out = [];
+  const walk = (dir) => {
+    for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+      if ([".git", "node_modules", "dist"].includes(d.name)) continue;
+      const p = path.join(dir, d.name), rel = path.relative(root, p).split(path.sep).join("/");
+      if (d.isDirectory()) { if (RUNTIME_DIR_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trajectory directories must not be committed" }); walk(p); }
+      else if (RUNTIME_ARTIFACT_RE.test(d.name)) out.push({ code: "E_RUNTIME_ARTIFACT", file: rel, message: "runtime tape/trace files must not be committed; keep them in the evidence store" });
+    }
+  };
+  walk(root);
+  return out;
 }
 
 export function validateAll({ root = PKG_ROOT, peerIndexFiles = [] } = {}) {
-  const ctx = { kinds: loadRegistriesConfig(), peers: loadPeerIndexes(peerIndexFiles) };
+  const ctx = { registries: loadRegistries(), peers: loadPeerIndexes(peerIndexFiles) };
   const all = loadRegistry(root);
   for (const v of all) validateVersion(v, ctx);
   validateLineage(all);
   const seen = new Map();
   for (const v of all) {
-    if (!v.blueprint) continue;
-    const key = `${v.blueprint.id}@${v.blueprint.version}`;
+    if (!v.blueprint?.metadata) continue;
+    const key = `${v.blueprint.metadata.id}@${v.blueprint.metadata.version}`;
     if (seen.has(key)) v.errors.push({ code: "E_DUP", file: `${v.rel}/blueprint.yaml`, where: "", message: `duplicate ${key} also at ${seen.get(key)}` });
     seen.set(key, v.rel);
   }
-  return {
-    versions: all,
-    errors: all.flatMap((v) => v.errors),
-    warnings: all.flatMap((v) => v.warnings),
-  };
+  const repoErrors = scanRuntimeArtifacts(root);
+  return { versions: all, errors: [...all.flatMap((v) => v.errors), ...repoErrors], warnings: all.flatMap((v) => v.warnings) };
 }
 
-export function buildIndex(all, commit = "unknown") {
-  const entries = all.filter((v) => v.blueprint && v.digest && !v.errors.length).map((v) => {
-    const bp = v.blueprint;
+/** Deterministic derived index: a pure function of registry content (no timestamps, no commit ids). */
+export function buildIndex(all, scope) {
+  const entries = all.filter((v) => v.scope === scope && v.blueprint && v.digest && !v.errors.length).map((v) => {
+    const bp = v.blueprint, md = bp.metadata;
     return {
-      id: bp.id, version: bp.version, status: bp.lifecycle.status, digest: v.digest, path: v.rel, sealed: SEALED.has(bp.lifecycle.status),
-      synthetic: bp.metadata.labels?.example === "true",
-      dependencies: bp.dependencies, compatibility: bp.compatibility,
-      ...(bp.lifecycle.deprecation?.replacedBy ? { replacedBy: bp.lifecycle.deprecation.replacedBy } : {}),
+      registry: REGISTRY, id: md.id, version: md.version, digest: v.digest, maturity: md.maturity, lifecycle: md.lifecycle,
+      origin: md.origin.type, location: v.rel, synthetic: md.synthetic === true, sealed: md.maturity === "canonical",
+      references: bp.references, compatibility: bp.spec.compatibility,
+      ...(v.overlay?.entries?.at(-1)?.replacedBy ? { replacedBy: v.overlay.entries.at(-1).replacedBy } : {}),
     };
   }).sort((a, b) => a.id.localeCompare(b.id) || semver.compare(a.version, b.version));
-  return { apiVersion: "qb.zeptly.dev/v1", kind: "RegistryIndex", registry: "qb-agents", commit, entries };
+  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "RegistryIndex", registry: REGISTRY, scope, entries };
+}
+
+// ---------- resolution (declared range -> exact version -> digest -> lock) ----------
+/** Resolve one declared reference against index entries. Never picks candidates or revoked versions. */
+export function resolveRef(ref, entries) {
+  const range = semver.validRange(ref.version);
+  if (!range) throw new Error(`invalid range ${ref.version}`);
+  const c = entries.filter((e) => e.registry === ref.registry && e.id === ref.id && e.maturity === "canonical" && e.lifecycle !== "revoked" && semver.satisfies(e.version, range));
+  if (!c.length) return null;
+  c.sort((a, b) => semver.rcompare(a.version, b.version));
+  const hit = c[0];
+  if (ref.digest && ref.digest !== hit.digest) throw new Error(`pinned digest for ${ref.registry}/${ref.id} does not match ${hit.version}`);
+  return { registry: hit.registry, id: hit.id, version: hit.version, digest: hit.digest };
+}
+export function buildResolutionLock(root, references, entries) {
+  const locks = references.map((declared) => {
+    const resolved = resolveRef(declared, entries);
+    if (!resolved) throw new Error(`cannot resolve ${declared.registry}/${declared.id}@${declared.version}`);
+    return { declared: { registry: declared.registry, id: declared.id, version: declared.version, ...(declared.digest ? { digest: declared.digest } : {}) }, resolved };
+  });
+  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "ResolutionLock", root, locks };
 }
 
 // ---------- immutability (git-diff based) ----------
 const git = (root, args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
-function gitShow(root, ref, rel) {
-  try { return git(root, ["show", `${ref}:${rel}`]); } catch { return undefined; }
-}
+const gitShow = (root, ref, rel) => { try { return git(root, ["show", `${ref}:${rel}`]); } catch { return undefined; } };
+const appendOnly = (before = [], after = []) => before.every((x, i) => after[i] !== undefined && canonicalize(after[i]) === canonicalize(x));
 
 /**
- * Compare HEAD working tree against `baseRef`. Sealed versions may only change `lifecycle`
- * (along an allowed transition) and append evidence refs; they may never be deleted.
+ * Compare the working tree against `baseRef`. Canonical versions may only: append attestations, approvals, evidence refs and
+ * lifecycle overlay entries. Content (digest scope), release record and suite are frozen; canonical versions cannot be deleted
+ * or demoted. Overlays are append-only for every version.
  */
 export function checkImmutability({ root = PKG_ROOT, baseRef }) {
   const errors = [];
-  const tree = git(root, ["ls-tree", "-r", "--name-only", baseRef, "qbs"]).split("\n").filter(Boolean);
-  const baseBlueprints = tree.filter((f) => /^qbs\/[^/]+\/[^/]+\/blueprint\.yaml$/.test(f));
-  for (const rel of baseBlueprints) {
+  const roots = Object.values(SCOPES);
+  const tree = roots.flatMap((r) => git(root, ["ls-tree", "-r", "--name-only", baseRef, "--", r]).split("\n").filter(Boolean));
+  for (const rel of tree.filter((f) => /\/blueprint\.yaml$/.test(f))) {
     const dir = path.posix.dirname(rel);
-    const before = parseYaml(gitShow(root, baseRef, rel));
-    const status0 = before?.lifecycle?.status;
-    const headFile = path.join(root, rel);
     const err = (code, file, message) => errors.push({ code, file, message });
-    if (!fs.existsSync(headFile)) {
-      if (SEALED.has(status0)) err("E_IMMUTABLE", rel, `sealed version (${status0}) cannot be deleted; retire it instead`);
-      continue;
-    }
+    const before = parseYaml(gitShow(root, baseRef, rel));
+    const m0 = before?.metadata?.maturity;
+    const headFile = path.join(root, rel);
+    if (!fs.existsSync(headFile)) { if (m0 === "canonical") err("E_IMMUTABLE", rel, "canonical version cannot be deleted; revoke it via the lifecycle overlay"); continue; }
     const after = readYaml(headFile);
-    const status1 = after.lifecycle?.status;
-    if (status0 !== status1) {
-      if (!TRANSITIONS[status0]?.includes(status1)) err("E_TRANSITION", rel, `illegal status transition ${status0} -> ${status1} (allowed: ${TRANSITIONS[status0]?.join(", ") || "none"})`);
-    }
-    if (!SEALED.has(status0)) continue; // unsealed versions may change freely (including becoming sealed)
-    if (blueprintDigest(before) !== blueprintDigest(after)) err("E_IMMUTABLE", rel, "sealed blueprint content changed; publish a new version instead");
-    for (const f of tree.filter((t) => t.startsWith(dir + "/") && t !== rel)) {
-      const name = f.slice(dir.length + 1);
-      const head = path.join(root, f);
-      if (!fs.existsSync(head)) { err("E_IMMUTABLE", f, "file of a sealed version was deleted"); continue; }
-      const b = gitShow(root, baseRef, f);
-      const h = fs.readFileSync(head, "utf8");
-      if (name === "evidence/refs.yaml") {
-        const oldRefs = parseYaml(b)?.refs ?? [], newRefs = parseYaml(h)?.refs ?? [];
-        for (const r of oldRefs) {
-          const n = newRefs.find((x) => x.id === r.id);
-          if (!n || canonicalize(n) !== canonicalize(r)) err("E_IMMUTABLE", f, `evidence ref "${r.id}" was modified or removed (evidence is append-only)`);
-        }
-      } else if (parseYaml(b) !== undefined && canonicalize(parseYaml(b)) !== canonicalize(parseYaml(h))) {
-        err("E_IMMUTABLE", f, "file of a sealed version changed");
+    if (m0 === "canonical" && after.metadata?.maturity !== "canonical") err("E_TRANSITION", rel, "a canonical version cannot return to candidate");
+    if (m0 === "canonical") {
+      if (artifactDigest(before) !== artifactDigest(after)) err("E_IMMUTABLE", rel, "canonical artifact content changed; publish a new version instead");
+      if (!appendOnly(before.attestations, after.attestations)) err("E_IMMUTABLE", rel, "attestations are append-only on canonical versions");
+      if (!appendOnly(before.security?.approvals, after.security?.approvals)) err("E_IMMUTABLE", rel, "security approvals are append-only on canonical versions");
+      for (const f of tree.filter((t) => t.startsWith(dir + "/") && t !== rel)) {
+        const name = f.slice(dir.length + 1);
+        const head = path.join(root, f);
+        if (!fs.existsSync(head)) { err("E_IMMUTABLE", f, "file of a canonical version was deleted"); continue; }
+        const b = parseYaml(gitShow(root, baseRef, f)), h = readYaml(head);
+        if (name === "evidence/refs.yaml") { if (!appendOnly(b?.refs, h?.refs)) err("E_IMMUTABLE", f, "evidence refs are append-only"); }
+        else if (name === "lifecycle.yaml") { /* checked below for every version */ }
+        else if (canonicalize(b) !== canonicalize(h)) err("E_IMMUTABLE", f, "file of a canonical version changed");
       }
+    }
+    // lifecycle overlay: append-only for every version, with legal transitions
+    const ovRel = `${dir}/lifecycle.yaml`;
+    if (tree.includes(ovRel)) {
+      const b = parseYaml(gitShow(root, baseRef, ovRel))?.entries ?? [];
+      const hf = path.join(root, ovRel);
+      if (!fs.existsSync(hf)) err("E_IMMUTABLE", ovRel, "lifecycle overlay cannot be deleted");
+      else if (!appendOnly(b, readYaml(hf)?.entries ?? [])) err("E_IMMUTABLE", ovRel, "lifecycle overlay is append-only; existing entries were changed or removed");
     }
   }
   return errors;

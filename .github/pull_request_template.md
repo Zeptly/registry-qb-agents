@@ -1,26 +1,28 @@
 ## What this PR does
-<!-- new QB / new version / status promotion / schema or tooling change -->
+<!-- new QB / new candidate version / promotion to canonical / lifecycle overlay entry / schema or tooling change -->
 
-## QB(s) and version(s) touched
-- `qb:<slug>@<version>`
+## Artifact(s)
+- `qb-agents/<id>@<version>` (maturity: candidate | canonical, lifecycle: active | deprecated | revoked)
 
 ## Change type
-- [ ] New QB or new version (never edit a sealed version)
-- [ ] Status promotion (`draft → candidate → canary → stable`, `stable → deprecated → retired`)
+- [ ] New candidate or new version (never edit a canonical version)
+- [ ] Promotion candidate → canonical (attestations, security review, release approval, release record)
+- [ ] Lifecycle overlay entry (append-only)
 - [ ] Schema / validator / CI change
 - [ ] Docs only
 
 ## Origin
-- [ ] Human-authored
-- [ ] Wisdom of Compute proposal (evidence refs + eval runs attached, human reviewer named in `provenance.authors`)
+- [ ] Authored
+- [ ] Evolved (source refs listed)
+- [ ] Evolved via Wisdom of Compute (hypothesis, evidence refs, eval runs, human reviewer named)
 
 ## Permission / budget widening
 - [ ] None
 - [ ] Yes: listed below and security review requested
 
-## Promotion checklist (for status changes)
-- [ ] `npm run validate` and `npm test` pass locally
-- [ ] Eval suite updated; gate metrics met by a passing `eval-run` bound to the blueprint digest
-- [ ] `npm run seal` run when moving to `canary` (release.yaml committed)
-- [ ] `compatibility.breaking` filled in when the major version changes
-- [ ] No endpoints, credentials, concrete model IDs or repo paths in the blueprint
+## Checklist
+- [ ] `npm run ci` passes locally
+- [ ] Attestations and approvals bind the CURRENT digest (stale ones fail validation)
+- [ ] `npm run seal` run when promoting to canonical
+- [ ] No endpoints, credentials, concrete model IDs, repo paths, runtime tapes or sensitive payloads
+- [ ] Synthetic examples stay under `synthetic/` and use the `synthetic.` id namespace

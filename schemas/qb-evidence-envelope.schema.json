@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:evidence-envelope:v1",
   "title": "QB Evidence Envelope",
-  "description": "PROVISIONAL (ownership unresolved). Contract for ONE event on a QB execution tape, as emitted by a QB runtime into the evidence store. Defined here so runtime and registry agree on lineage; instances are never committed to this repository (except as test fixtures).",
+  "description": "PROVISIONAL (ownership unresolved). Contract for ONE event on a QB execution tape, as emitted by a QB runtime into the evidence store. Defined here so runtime and registry agree on lineage; instances are never committed to this repository (except as test fixtures). A `resolution.locked` event payload is a ResolutionLock.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -60,18 +60,22 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "registry",
         "id",
         "version",
-        "blueprintDigest"
+        "digest"
       ],
       "properties": {
+        "registry": {
+          "const": "qb-agents"
+        },
         "id": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbId"
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
         },
         "version": {
           "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
         },
-        "blueprintDigest": {
+        "digest": {
           "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
         }
       }
@@ -93,6 +97,7 @@
     },
     "type": {
       "enum": [
+        "resolution.locked",
         "session.started",
         "session.completed",
         "session.failed",

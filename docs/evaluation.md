@@ -1,27 +1,20 @@
 # Evaluation structure
 
-> Signed/attested evaluation results are **unresolved**; gate metrics in `evidence/refs.yaml` are unattested claims. All example runs in `qbs/` are synthetic.
+> Signed/attested evaluation results are **deferred**: attestations are digest-bound but unsigned, and their metrics are
+> claims about evidence held elsewhere. All example runs are synthetic.
 
-Each version from `candidate` onward ships `evals/suite.yaml` (schema: `qb-eval-suite.schema.json`).
+Each version that carries an evaluation attestation, and every canonical version, ships `evals/suite.yaml`
+(`schemas/qb-eval-suite.schema.json`, `kind: QBEvalSuite`, `metadata{registry,id,version}` of the version it belongs to).
 
-* **datasets** – large fixtures live outside Git (`dataset:<id>` + range, `dev/test/holdout` split).
-* **scenarios** – input (validated against `contracts.input.schema`), optional simulated `environment`
-  (fixtures, fault injection such as tool outages), expectations, graders. Include failure-path scenarios
-  (contradictory sources, capability outage, budget pressure, Jev unavailable), not only happy paths.
-* **graders** – `deterministic` (tape/output assertions), `rubric`, `system-one-judge`, `human`.
-  Prefer deterministic checks; judge models must not be the model family being judged where avoidable.
-* **metrics** – success rate, quality, cost (p95), latency (p95), replans, escalations, etc.
-* **baseline** – parent version + tolerance; candidates should not regress against it.
-* **gates** – thresholds per target status (`candidate`, `canary`, `stable`).
+* **datasets**: large fixtures live outside Git (`dataset:<id>` tokens; namespace ownership unresolved).
+* **scenarios**: input (validated against `spec.contracts.input.schema`), optional simulated `environment` (fixtures, fault
+  injection), expectations, graders. Include failure paths (contradictory sources, outages, budget pressure, Jev unavailable).
+* **graders**: `deterministic`, `rubric`, `system-one-judge`, `human`.
+* **metrics**, **runs**, **baseline** (`exactRef` of the source version + tolerance).
+* **gates**: `candidate` (optional) and `canonical` (required) thresholds.
 
-## How gates are enforced
+## Enforcement
 
-A version at `canary` needs an `eval-run` ref with `result: pass`, `gate: canary`, `blueprintDigest` equal to the
-version's digest, and `metrics` satisfying every comparison in `gates.canary`. `stable` additionally needs the `stable`
-gate. Editing the suite after sealing changes `suiteDigest` and fails CI. Metric values are *claims about* evidence
-held in the store; the store is authoritative, and a human reviewer spot-checks the URI (see decisions on signed results).
-
-## Running evaluations
-
-Execution belongs to the runtime/eval harness, not this repo. The harness reads the suite by `id@version`, writes
-raw results to the evidence store, and returns a summary that a human/automation commits into `evidence/refs.yaml`.
+An `evaluation` attestation with `result: pass` must meet every comparison in `gates.<its gate>` (`E_GATE`). Promotion to
+`canonical` requires a passing `canonical`-gate attestation whose `subjectDigest` equals the current digest. Editing the
+suite after release changes `suiteDigest` and fails validation. Execution of evaluations belongs to the runtime/eval harness.

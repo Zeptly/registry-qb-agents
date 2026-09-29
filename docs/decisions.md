@@ -1,37 +1,34 @@
 # Decisions and open questions
 
-> The baseline is a **candidate** architecture, subject to cross-registry reconciliation. All 12 questions below are **unresolved**.
+> Baseline: Zeptly Registry Protocol v0.1 is approved. Items the protocol settles are recorded as accepted; items it defers
+> are deferred, not decided here. QB-registry choices where the protocol is silent are listed in [provisional.md](provisional.md).
 
-## Accepted (baseline)
+## Accepted
 
-| # | Decision | Why |
+| # | Decision | Basis |
 |---|---|---|
-| D1 | Directory-per-version, YAML + JSON Schema, Node validator | addressable snapshots; easy diffs; Node matches Trigger.dev stack |
-| D2 | Seal at `canary`, digest = blueprint minus lifecycle | evidence must bind to exact content; status must still move |
-| D3 | Single `dependencies` table; IDs + semver ranges | cross-registry protocol independent of repos/paths |
-| D4 | Evidence by pointer (URI + digest) | Git stays small/safe; store holds raw data |
-| D5 | Model *tiers*, Jev *contract* | gateway-swappable; definitions don't rot |
-| D6 | Structured delegation rules, no expression language | no code in definitions; analysable by validator |
-| D7 | Instructions inline in the blueprint | digest covers everything; revisit for large prompts |
-| D8 | `selfModification` is a schema constant; ≥1 human author enforced | "no silent self-rewrite" is structural |
+| D1 | Common envelope: `apiVersion`, `kind`, `metadata`, `spec`, `references`, `provenance`, `security`, `attestations` | protocol |
+| D2 | `maturity`, `origin`, `lifecycle` independent; lifecycle is an append-only overlay | protocol |
+| D3 | Structured references `{registry, id, version, digest?}`; resolution = range → exact version + digest → lock → evidence | protocol |
+| D4 | Canonical versions immutable, digest-addressed; attestations must bind the exact digest | protocol |
+| D5 | Raw tapes/trajectories never in Git; synthetic examples isolated | protocol |
+| D6 | QB `spec` semantics (decomposition, delegation, replanning, budgets, concurrency, escalation, HITL, Jev, evaluation) preserved | protocol |
+| D7 | Models are tiers, Jev is a gateway contract token, definitions are data (no code/endpoints/secrets) | QB design |
+| D8 | `selfModification` is a constant `forbidden`; ≥1 human author; Wisdom-of-Compute requirements schema-enforced | QB design |
 
-## Open questions
+## The 12 unresolved decisions (all still open)
 
-1. **Tape/envelope ownership.** The evidence envelope schema lives here as a *contract*; should it move to a shared
-   `runtime-trigger`/Cortex schema package that both consume?
-2. **Peer index publication.** How do peer registries publish `index.json` (Releases, a branch, an OCI/artifact store)
-   and how does CI fetch them? Until decided, peer resolution is opt-in via `--peer-index`.
-3. **Signed evaluation results.** Gate metrics in `refs.yaml` are asserted by the committer. Should the eval harness
-   sign results (or CI verify against Cortex with a read-only token) so metrics are attested?
-4. **Canonical `capability:` and `gateway:` namespaces.** No owning repo yet (`registries.yaml` has `repo: null`).
-   Who owns gateway contract definitions (AI Gateway/Jev, Cortex state/evidence)?
-5. **Large prompts and fixtures.** Support `instructionsFile`/prompt fragments under the version dir (digest over the tree)?
-6. **Traffic channels.** Unresolved and not implemented: are `canary`/`stable` traffic splits purely runtime config, or
-   should a registry publish channel pointers? No production traffic splitting lives in this registry.
-7. **Nested QBs.** Disabled: `nestedQb` only accepts `forbidden`. Cycle detection and budget inheritance need design before enabling.
-8. **Multi-tenancy.** Are some QBs workspace-scoped/private? If so, a separate private registry or a visibility field.
-9. **Retention/legal.** Evidence retention limits, deletion/erasure propagation to `evidence/refs.yaml` pointers.
-10. **Approval enforcement.** `governance.changeControl.minApprovals` is declarative; enforcement is a GitHub ruleset. Automate a check?
-11. **Semver enforcement depth.** Contract compatibility is detected only as "changed"; a real JSON-Schema compatibility
-    checker could decide minor vs major automatically.
-12. **WoC proposer identity.** Which bot identity opens proposals, and where is its allowed-PR-scope defined?
+| # | Question | Status |
+|---|---|---|
+| 1 | Ownership of the evidence envelope/tape schema (QB registry vs shared platform package) | deferred by protocol (Evidence Protocol) |
+| 2 | Peer-index publication and retrieval mechanism | deferred by protocol |
+| 3 | Signed/attested evaluation results | deferred by protocol (signing) |
+| 4 | Ownership of `capability:` and `gateway:` namespaces (and model namespaces) | deferred by protocol |
+| 5 | Large prompts/fixtures as files under the version directory (digest over the tree) | open |
+| 6 | Traffic-channel semantics | deferred by protocol; not implemented |
+| 7 | Nested QBs (cycle detection, budget inheritance) | deferred by protocol; disabled |
+| 8 | Multi-tenancy / workspace-scoped or private QBs | deferred by protocol (workspace overrides) |
+| 9 | Evidence retention and erasure propagation to pointers | open |
+| 10 | Enforcement of `governance.changeControl.minApprovals` (currently declarative; digest-bound approvals are validated) | open |
+| 11 | Depth of automated semver/contract-compatibility enforcement | open |
+| 12 | Wisdom-of-Compute proposer identity and permitted PR scope | open |

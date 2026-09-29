@@ -1,12 +1,12 @@
 # Architecture
 
-> **Candidate architecture, subject to cross-registry reconciliation.** Items listed in [provisional.md](provisional.md) are not yet canonical.
+> Implements the approved **Zeptly Registry Protocol v0.1** (see [protocol-conformance.md](protocol-conformance.md)). Deferred items and QB-side choices are listed in [provisional.md](provisional.md).
 
 ## Where this repository sits
 
 ```
                     ┌──────────────────────── Git (this repo) ────────────────────────┐
- human / WoC  ──PR──▶  qbs/<slug>/<ver>/{blueprint, evals, evidence refs, release}   │
+ human / WoC  ──PR──▶  <scope>/<id>/<ver>/{blueprint, evals, evidence refs, release, lifecycle}   │
                     └──────────────┬───────────────────────────────────────────────────┘
                                    │ dist/index.json (id, version, status, digest)
                                    ▼
@@ -33,8 +33,8 @@
 
 ## Repository design
 
-*Directory per immutable version* (`qbs/<slug>/<version>/`). Chosen over "one file + git tags" because
-resolution by `id@version` is a plain lookup, released versions can sit side by side (canary vs stable),
+*Directory per version* (`qbs/<id>/<version>/`; synthetic examples under `synthetic/qbs/`). Chosen over "one file + git tags" because
+resolution by `id@version` is a plain lookup, canonical versions can sit side by side,
 diffs between versions are ordinary file diffs, and immutability is checkable from a PR diff.
 Git history stays the audit trail; directories are the addressable snapshots.
 
@@ -42,7 +42,7 @@ Git history stays the audit trail; directories are the addressable snapshots.
 (`scripts/lib/core.mjs`). The validator forbids URLs/hosts, credential-shaped strings, concrete model IDs
 and repository paths inside definitions. Routing rules are structured data, deliberately not an expression language.
 
-*Content addressing.* `blueprintDigest = sha256(canonical JSON of the blueprint minus lifecycle)`.
+*Content addressing.* `digest = sha256(canonical JSON of the artifact minus maturity, lifecycle, approvals, attestations)`.
 Evidence, releases and runtime events all bind to that digest, so "what exactly ran" is unambiguous.
 
 ## AgentGit-inspired lineage (adapted, not adopted)
@@ -64,9 +64,9 @@ AgentGit's lineage vocabulary informs it. The registry itself never stores runs.
 
 ## Two lineages, kept distinct
 
-1. **Definition lineage** (Git): `qb:x@1.0.0 → 1.1.0 → …`, via `provenance.parent`, PR-reviewed.
+1. **Definition lineage** (Git): `x@1.0.0 → 1.1.0 → …`, via `metadata.origin.evolution.sourceRefs`, PR-reviewed as governance transport.
 2. **Execution lineage** (evidence store): session → run → branch → checkpoint → event, each event stamped with
-   `qb.id`, `qb.version`, `blueprintDigest`. This is the join key between the two.
+   `qb.{registry,id,version,digest}`. This is the join key between the two.
 
 ## Extensibility
 

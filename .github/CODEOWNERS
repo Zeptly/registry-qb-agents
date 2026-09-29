@@ -8,3 +8,4 @@
 /docs/security.md    @Zeptly/security
 # Any change to a QB definition needs its owner-team review via the PR; permission widening also needs security
 /qbs/                @Zeptly/qb-maintainers @Zeptly/security
+/synthetic/          @Zeptly/qb-maintainers

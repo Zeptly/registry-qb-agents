@@ -1,63 +1,54 @@
-# Evidence model and Wisdom of Compute
+# Evidence, attestations and Wisdom of Compute
 
-> **Ownership of the evidence envelope/protocol is PROVISIONAL**: it may become a shared Zeptly platform-level contract. See [provisional.md](provisional.md). Example evidence in `qbs/` is synthetic.
+> The full **Evidence Protocol** is a separate platform contract whose ownership is deferred by the protocol. The runtime
+> event envelope here (`schemas/qb-evidence-envelope.schema.json`) is a **provisional QB-side contract**. Example data is synthetic.
 
 ## Principle
 
-Agent execution produces machine evidence: session IDs, execution tapes, trajectories, delegation decisions, model and
-capability selections, retries, replans, failures, successful paths, latency, cost, evaluations, outcome quality.
-This evidence *informs* improvement. It never *applies* it.
+Execution produces machine evidence (session IDs, tapes, trajectories, delegation decisions, model/capability
+selections, retries, replans, failures, latency, cost, evaluations). Evidence *informs* improvement; it never *applies* it:
 
 ```
-production QB run ─▶ evidence (Cortex) ─▶ candidate improvement (proposal)
-      ─▶ evaluation ─▶ Git branch/PR ─▶ validation + human review ─▶ new canonical version
+production QB → evidence → candidate improvement → evaluation → Git branch/PR → validation → canonical new version
 ```
 
-A QB can never silently rewrite or deploy its own definition: `governance.selfModification` is the constant
-`forbidden`, every version needs a human author of record, and only merged PRs create versions.
-The runtime has no write path into this repository (see [security](security.md)).
+`spec.governance.selfModification` is the constant `forbidden`; every version needs a human author; the runtime has no
+write path into this repository.
 
 ## What lives where
 
 | Data | Location | In Git? |
 |---|---|---|
-| Blueprint, eval suite, release seal | `qbs/<slug>/<ver>/` | yes |
-| Evidence **pointers** (URI, digest, summary metrics, gate result) | `evidence/refs.yaml` | yes, append-only |
-| Sessions, tapes, trajectories, raw eval outputs | evidence store (Supabase/Cortex, via `gateway:cortex/evidence`) | **never** |
+| Blueprint, suite, release record, lifecycle overlay | `<scope>/<id>/<version>/` | yes |
+| **Attestations** (digest-bound assessments: URI, subjectDigest, gate, result, summary metrics) | `attestations[]` in the blueprint | yes, append-only once canonical |
+| **Evidence pointers** (supporting evidence: samples, trajectory sets, incidents, benchmarks) | `evidence/refs.yaml` | yes, append-only once canonical |
+| Sessions, tapes, trajectories, raw eval outputs, sensitive payloads | evidence store (Cortex) | **never** |
 
-## Lineage identifiers (runtime contract)
+Enforced: version directories accept only a fixed file allow-list (`E_UNEXPECTED_FILE`); `*.jsonl/.ndjson/.tape/.har` and
+`tapes/`, `trajectories/`, `sessions/`, `traces/` directories are rejected repo-wide (`E_RUNTIME_ARTIFACT`); schemas are
+`additionalProperties: false`; summaries are length-limited; URLs, credentials and model IDs are linted.
 
-Defined in [`qb-evidence-envelope.schema.json`](../schemas/qb-evidence-envelope.schema.json); prefixes + ULID.
+## Attestations
 
-| ID | Meaning |
-|---|---|
-| `qbs_…` sessionId | root of a lineage tree (one user intent) |
-| `qbr_…` runId | one durable execution attempt (incl. resumes) |
-| `qbb_…` branchId | a line of execution; forks/rollbacks create new branches (`parentBranchId`, `forkedFromCheckpointId`) |
-| `qbc_…` checkpointId | restorable state at a policy-defined trigger |
-| `qbe_…` eventId | one tape event; ordered by `seq` within a branch |
+`{type, ref (evidence://…), subjectDigest, capturedAt, synthetic, summary}`; `type: evaluation` adds `gate`
+(`candidate|canonical`), `result` and summary `metrics`. Rules: `subjectDigest` MUST equal the artifact's current digest;
+a `pass` must actually satisfy the suite thresholds for its gate (`E_GATE`). Signing is deferred.
 
-Every event carries `qb.{id, version, blueprintDigest}` so evidence always joins to the exact sealed definition.
-Event types cover plans, decomposition, delegation decisions, model/capability selection, Jev calls, tool history,
-evaluations, retries, replans, checkpoints, branch forks, resumes, rollbacks, HITL, escalations, budgets and failures.
-Reproducibility comes from: sealed digest + recorded model/capability selections + tool tape + checkpoints.
+## Lineage identifiers (provisional runtime contract)
 
-## Evidence refs (`evidence/refs.yaml`)
+`qbs_` session, `qbr_` run, `qbb_` branch (forks/rollbacks create new branches, history never rewritten), `qbc_` checkpoint,
+`qbe_` event. Every event carries `qb: {registry, id, version, digest}`. The `resolution.locked` event records the
+[resolution lock](cross-registry-references.md) so evidence shows exactly which versions and digests ran.
 
-Types: `eval-run`, `session-sample`, `trajectory-set`, `incident`, `benchmark`, `human-review`.
-Each ref records `uri` (`evidence://<store>/<path>`, opaque), `contentDigest`, `capturedAt`, the `blueprintDigest`
-it was gathered against, `redaction` class, a short summary and, for eval-runs, `gate`, `result`, `metrics`.
-CI uses eval-run refs as **promotion evidence** (gate thresholds are checked against `metrics`).
-Prefer `aggregate-only`/`pseudonymised` redaction: repository contents are broadly readable.
+## Wisdom of Compute mutation requirements
 
-## Wisdom-of-Compute proposals
+A WoC-derived version must:
 
-A WoC-derived version sets `provenance.origin: wisdom-of-compute` and the schema then *requires*:
-`parent`, `derivedFrom.hypothesis`, ≥1 `derivedFrom.evidenceRefs`, ≥1 `derivedFrom.evalRuns`,
-`humanReviewRequired: true`. The proposer may be an automation actor, but must open a PR like anyone else, a human
-must be listed and approve, and the normal gates apply. See `qbs/research-synthesis/1.1.0/` for a worked example.
+1. set `metadata.origin.type: evolved` with `evolution.sourceRefs[0]` = the version it evolved from (same id);
+2. carry a `provenance.transformations[]` entry `kind: wisdom-of-compute` with `hypothesis`, ≥1 `evidenceRefs`, ≥1
+   `evalRuns` and `humanReviewRequired: true`;
+3. list a human among `provenance.authors`; automation may propose but not merge;
+4. pass the normal promotion gates (attestations, security review, release approval).
 
-## Runtime obligations (checked by the runtime team, declared here)
-
-`blueprint.evidence` states what must be captured, tape level (`metadata-only|redacted-full|full`), redaction,
-retention and sink contract. Retention/redaction must be enforced at write time by the sink, not by consumers.
+The proposal is a **candidate** registry object; Git branches/PRs are only the governance transport.
+Example: `synthetic/qbs/synthetic.research-synthesis/1.1.0`.

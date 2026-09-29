@@ -1,20 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:registry-index:v1",
-  "title": "QB Registry Index",
-  "description": "Generated, machine-consumable index (dist/index.json). The single resolution contract peers and runtimes use; filesystem layout is never part of the contract.",
+  "title": "Registry Index",
+  "$comment": "Derived, deterministic data (no timestamps or commit ids). Publication and retrieval mechanism is deferred by the protocol; this file is a local build artifact.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
     "registry",
-    "commit",
+    "scope",
     "entries"
   ],
   "properties": {
     "apiVersion": {
-      "const": "qb.zeptly.dev/v1"
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
     },
     "kind": {
       "const": "RegistryIndex"
@@ -22,8 +22,12 @@
     "registry": {
       "const": "qb-agents"
     },
-    "commit": {
-      "type": "string"
+    "scope": {
+      "description": "`production` indexes never contain synthetic entries; `synthetic` indexes only contain synthetic entries.",
+      "enum": [
+        "production",
+        "synthetic"
+      ]
     },
     "entries": {
       "type": "array",
@@ -31,53 +35,114 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "registry",
           "id",
           "version",
-          "status",
           "digest",
-          "path",
-          "dependencies",
-          "compatibility",
-          "synthetic"
+          "maturity",
+          "lifecycle",
+          "origin",
+          "location",
+          "synthetic",
+          "references",
+          "compatibility"
         ],
         "properties": {
+          "registry": {
+            "const": "qb-agents"
+          },
           "id": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbId"
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
           },
           "version": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
           },
-          "status": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycleStatus"
-          },
           "digest": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
           },
-          "path": {
-            "type": "string"
+          "maturity": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/maturity"
+          },
+          "lifecycle": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycle"
+          },
+          "origin": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/originType"
+          },
+          "location": {
+            "type": "string",
+            "description": "Artifact location relative to the repository root."
+          },
+          "synthetic": {
+            "type": "boolean"
           },
           "sealed": {
             "type": "boolean"
           },
-          "dependencies": {
+          "references": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
             }
           },
           "compatibility": {
             "type": "object"
           },
           "replacedBy": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
-          },
-          "synthetic": {
-            "description": "true for example/synthetic QBs, which must never be resolved by production consumers.",
-            "type": "boolean"
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
           }
         }
       }
     }
   },
-  "$comment": "PROVISIONAL: index publication and retrieval mechanism is unresolved. NOT YET CANONICAL."
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "production"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "synthetic": {
+                  "const": false
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "synthetic"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "synthetic": {
+                  "const": true
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        }
+      }
+    }
+  ]
 }

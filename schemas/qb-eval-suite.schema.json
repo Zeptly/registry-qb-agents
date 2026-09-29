@@ -1,34 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:eval-suite:v1",
-  "title": "QB Evaluation Suite",
+  "title": "QB Evaluation Suite (sidecar of a QB version)",
   "description": "Pre-release evaluation definition for one QB version: scenarios, graders, metrics and the promotion gates per lifecycle stage.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
-    "id",
-    "for",
+    "metadata",
+    "synthetic",
     "scenarios",
     "graders",
     "metrics",
-    "gates",
-    "synthetic"
+    "gates"
   ],
   "properties": {
     "apiVersion": {
-      "const": "qb.zeptly.dev/v1"
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
     },
     "kind": {
       "const": "QBEvalSuite"
-    },
-    "id": {
-      "type": "string",
-      "pattern": "^evalsuite:[a-z][a-z0-9-]*$"
-    },
-    "for": {
-      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
     },
     "datasets": {
       "description": "Large fixtures live outside Git (Cortex); referenced by stable ID.",
@@ -43,7 +35,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^dataset:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
+            "pattern": "^dataset:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$",
+            "description": "Opaque dataset token; dataset namespace ownership is unresolved."
           },
           "version": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semverRange"
@@ -207,7 +200,7 @@
       ],
       "properties": {
         "ref": {
-          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
         },
         "tolerance": {
           "type": "number",
@@ -217,7 +210,7 @@
       }
     },
     "gates": {
-      "description": "Thresholds that must be met by a passing eval-run evidence record before promotion INTO the named status.",
+      "description": "Thresholds an evaluation attestation must meet before promotion INTO the named maturity gate.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -227,13 +220,7 @@
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison"
           }
         },
-        "canary": {
-          "type": "array",
-          "items": {
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison"
-          }
-        },
-        "stable": {
+        "canonical": {
           "type": "array",
           "items": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/comparison"
@@ -241,13 +228,33 @@
         }
       },
       "required": [
-        "canary",
-        "stable"
+        "canonical"
       ]
     },
     "synthetic": {
       "description": "`true` marks a fabricated example suite (fictional datasets/scenarios). Only permitted for blueprints labelled example=\"true\".",
       "type": "boolean"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "const": "qb-agents"
+        },
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        }
+      },
+      "description": "Identity of the QB version this suite belongs to."
     }
   }
 }

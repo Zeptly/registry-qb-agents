@@ -1,34 +1,40 @@
 # Contributing / promotion workflow
 
-## Create a new QB
+Follows the Zeptly Registry Protocol v0.1 (see [docs/protocol-conformance.md](docs/protocol-conformance.md)). Git branches and
+pull requests are governance transport; **candidates are registry objects** (directories with `maturity: candidate`).
 
-1. `mkdir -p qbs/<slug>/0.1.0` and copy a nearby example's `blueprint.yaml` (status `draft`).
-2. Fill every section; declare all referenced IDs in `dependencies`.
-3. `npm run validate` until clean. Open a PR.
+## Create a candidate
+
+1. `mkdir -p qbs/<id>/<version>` (examples go under `synthetic/qbs/synthetic.<name>/` and must stay synthetic).
+2. Write `blueprint.yaml` in the envelope (`maturity: candidate`, `lifecycle: active`). Declare every referenced
+   Execution Agent / Tiny Agent / Skill in `references`.
+3. `npm run ci` until clean. Open a PR.
 
 ## Change an existing QB
 
-*Never edit a sealed version* (`canary` and later). Copy the directory to a new version, set
-`provenance.parent`, bump per [versioning rules](docs/lifecycle-versioning.md), describe the change in
-`provenance.changelog`, list `compatibility.breaking` when applicable.
+Never edit a canonical version. Create a new candidate directory, set `metadata.origin` (`evolved` + `evolution.sourceRefs`
+= the source version), fill `provenance.sourceRefs`, bump per [versioning rules](docs/lifecycle-versioning.md); a candidate
+must exceed every canonical version of the id.
 
-## Promote
+## Promote candidate → canonical
 
-| Step | Where | Evidence |
-|---|---|---|
-| draft → candidate | PR | add `evals/suite.yaml`; scenarios validate against the input contract |
-| candidate → canary | PR | passing `eval-run` (`gate: canary`) in `evidence/refs.yaml`; run `npm run seal`; set status `canary` |
-| canary → stable | PR | canary-period evidence + passing `stable` eval-run; set status `stable` |
-| stable → deprecated → retired | PR | `lifecycle.deprecation` with `replacedBy` |
+1. Add `evals/suite.yaml` (thresholds under `gates.canonical`).
+2. Finish content. **Any edit after this invalidates assessments.**
+3. Add a passing `evaluation` attestation (`gate: canonical`) bound to the current digest, plus human `security-review`
+   and `release-approval` entries in `security.approvals` bound to the same digest.
+4. Set `metadata.maturity: canonical`; run `npm run seal -- <id>@<version> --pr <ref>`.
+5. `npm run ci`. The PR needs security review if `W_PERMISSION_WIDENING` is reported.
 
-Order inside a promotion PR: add evidence → set status → `npm run seal` (canary only) → `npm run validate && npm test`.
-The digest changes whenever blueprint content changes, so evidence must be recorded against the final content.
+## Lifecycle changes
 
-## Improvement proposals from evidence (Wisdom of Compute)
+Append an entry to `lifecycle.yaml` (`active → deprecated → revoked`, never rewrite) and mirror the effective state in
+`metadata.lifecycle`.
 
-Same as any change, plus `provenance.origin: wisdom-of-compute`, `parent`, `derivedFrom` (hypothesis, evidence URIs,
-eval-run URIs) and a named human reviewer. Automation may open the PR; it may not merge it.
+## Wisdom-of-Compute proposals
 
-## Review expectations
+See [docs/evidence-model.md](docs/evidence-model.md): `evolved` origin, a `wisdom-of-compute` transformation with
+hypothesis/evidence/eval runs, a named human reviewer. Automation may open the PR; it may not merge it.
 
-Owners review intent; security reviews any `W_PERMISSION_WIDENING`. Reviewers should spot-check evidence URIs and gate metrics.
+## Never commit
+
+Raw tapes, trajectories, sessions, sensitive payloads, credentials, endpoints, concrete model IDs, repository paths.

@@ -2,24 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zeptly:qb:schema:evidence-refs:v1",
   "title": "QB Evidence References",
-  "description": "Append-only index of POINTERS to machine evidence about one QB version. Raw sessions, tapes and trajectories live in the evidence store (Supabase/Cortex), never in Git.",
+  "description": "Append-only index of POINTERS to supporting machine evidence about (or leading to) one QB version. Raw sessions, tapes and trajectories live in the evidence store, never in Git. Digest-bound assessments are `attestations` in the blueprint.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
-    "for",
+    "metadata",
     "refs"
   ],
   "properties": {
     "apiVersion": {
-      "const": "qb.zeptly.dev/v1"
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
     },
     "kind": {
       "const": "QBEvidenceRefs"
-    },
-    "for": {
-      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/qbPinnedRef"
     },
     "refs": {
       "type": "array",
@@ -31,9 +28,8 @@
           "type",
           "uri",
           "capturedAt",
-          "blueprintDigest",
-          "summary",
-          "synthetic"
+          "synthetic",
+          "summary"
         ],
         "properties": {
           "id": {
@@ -41,7 +37,6 @@
           },
           "type": {
             "enum": [
-              "eval-run",
               "session-sample",
               "trajectory-set",
               "incident",
@@ -59,31 +54,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "blueprintDigest": {
-            "description": "Digest of the exact blueprint this evidence was gathered against.",
-            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
-          },
-          "gate": {
-            "enum": [
-              "candidate",
-              "canary",
-              "stable"
-            ],
-            "description": "For eval-runs: the promotion gate this run was evaluated against."
-          },
-          "result": {
-            "enum": [
-              "pass",
-              "fail",
-              "inconclusive"
-            ]
-          },
-          "metrics": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "number"
-            }
-          },
           "redaction": {
             "enum": [
               "none",
@@ -97,28 +67,33 @@
             "maxLength": 600
           },
           "synthetic": {
-            "description": "MUST be stated explicitly. `true` marks fabricated example data that is not real execution evidence; it is only permitted in blueprints labelled example=\"true\" and must use the `evidence://synthetic-example/` store.",
             "type": "boolean"
+          },
+          "subjectDigest": {
+            "description": "Digest of the artifact version the evidence was gathered about (often the parent). Informational; not an attestation.",
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
           }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "const": "qb-agents"
         },
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "type": {
-                  "const": "eval-run"
-                }
-              }
-            },
-            "then": {
-              "required": [
-                "result",
-                "gate",
-                "metrics"
-              ]
-            }
-          }
-        ]
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        }
       }
     }
   }

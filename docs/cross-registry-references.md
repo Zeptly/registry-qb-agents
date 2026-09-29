@@ -1,49 +1,46 @@
-# Cross-registry reference protocol
+# Structured references, indexes and resolution
 
-> **The identifier syntax, resolution algorithm and index publication described here are PROVISIONAL and NOT YET CANONICAL.** They are intentionally not aligned to the Skills Registry (or any peer) yet. See [provisional.md](provisional.md).
+> Follows the approved protocol. Peer-index **distribution** (how registries publish/retrieve indexes) is deferred and not
+> implemented; the tooling here only reads LOCAL files and never touches the network.
 
-Registries: `registry-qb-agents` (this), `registry-execution-agents`, `registry-tiny-agents`, `registry-skills`,
-plus capability/gateway/dataset namespaces. **No repository name, path or URL appears in a definition.**
+## Reference object
 
-## Grammar
-
-```
-id          := kind ":" slug ( "/" slug )*            slug := [a-z][a-z0-9-]* (≤64)
-kind        := qb | execution-agent | tiny-agent | skill | capability | gateway | dataset | evalsuite
-pinnedRef   := id "@" semver                           e.g. qb:research-synthesis@1.0.0
-dependency  := { id, version: semver-range, optional?, digest? }
-evidence    := "evidence://" store "/" path            opaque; resolved only by the evidence gateway
+```yaml
+references:
+  - registry: skills            # skills | tiny-agents | execution-agents | qb-agents
+    id: source-evaluation       # dot-separated lowercase slugs (grammar is the QB registry's choice)
+    version: "^1.0.0"           # range in declarations; exact in provenance/lineage/locks
+    digest: null                # optional integrity pin
 ```
 
-Examples: `execution-agent:web-researcher ^1.0.0`, `skill:source-citation ^1.0.0`,
-`capability:web-search ^1.0.0`, `gateway:ai-gateway/jev ^1.0.0`.
+* `spec` sections name ids only (`delegation.executionAgents.allow`, `tinyAgents.allowedTemplates`, `allowedSkills`,
+  rule targets); the registry is implied by the field and every id MUST be declared in `references` (`E_REF_UNDECLARED`).
+* `qb-agents` references are rejected: nested QB execution is disabled (`E_NESTED_QB`).
+* Capabilities and gateway contracts are **not** registries. They are opaque platform tokens (`capability:…`, `gateway:…`)
+  whose namespace ownership is unresolved. They are validated by shape only.
+* Structural validation needs no network: registry allow-list (`registries.yaml`), semver ranges, uniqueness, declaration.
 
-Rules:
+## Index
 
-1. Every ID used anywhere in a blueprint (delegation targets, capabilities, Jev/state/evidence gateways, per-capability
-   limits) **must be declared once in `dependencies`** with a semver range (`E_DEP_UNDECLARED`).
-2. Kinds must exist in [`registries.yaml`](../registries.yaml). That file maps kinds to owning registries for humans/tooling;
-   it is not used to locate files.
-3. `digest` is an optional integrity pin, checked when the peer publishes digests.
-4. `gateway:*` IDs name abstract **contracts** (AI Gateway/Jev, state store, evidence sink). Which physical service satisfies
-   a contract is runtime configuration.
+`dist/index.json` (production) and `dist/synthetic-index.json` are **deterministic derived data** (no timestamps or commit
+ids; sorted). Entry: `{registry, id, version, digest, maturity, lifecycle, origin, location, synthetic, sealed, references,
+compatibility, replacedBy?}`. The production index schema forbids `synthetic: true`; the synthetic index only allows it.
+CI builds both twice and compares.
 
-## Resolution contract: `dist/index.json`
+## Resolution
 
-Illustrative shape of an index (publication and retrieval are **unresolved**; `dist/index.json` is currently only a local build artifact uploaded by CI): each entry is (see `schemas/qb-registry-index.schema.json`):
-`{ id, version, status, digest, dependencies, compatibility }` per version. A resolver would map `id + range → satisfying non-retired version → digest`; the resolution algorithm and distribution channel are not defined.
+```
+declared range → resolver → exact version → content digest → runtime lock → evidence
+```
 
-### Validation against peers
+`resolveRef` (offline, over index entries supplied by the caller): highest satisfying **canonical**, **non-revoked**
+version; candidates and revoked versions are never selected; a pinned `digest` must match. `buildResolutionLock` produces a
+`ResolutionLock` (`schemas/qb-resolution-lock.schema.json`): `root` (registry/id/version/digest) plus `locks[]` of
+`{declared, resolved{registry,id,version,digest}}`. The runtime records the lock in evidence (`resolution.locked`).
 
 ```bash
-npm run validate -- --peer-index ../peer-indexes/execution-agents.json --peer-index …
+npm run resolve -- synthetic.research-synthesis@1.0.0 --scope synthetic --index peer-index.json
 ```
 
-With peer indexes: every non-optional dependency must have a satisfying, non-retired peer (`E_UNRESOLVED`); a `stable`
-QB requires `stable` peers; digest pins must match. Without them, only syntax/kinds/declaration are checked (offline-safe).
-`--peer-index` is a local aid only; how peer indexes are published and retrieved is unresolved.
-
-## Reverse direction
-
-Peers referencing a QB (e.g. a skill "used by qb:x") use `qb:<slug>@range` and resolve through this index the same way.
-QBs never embed peer definitions; they never copy files across registries.
+With `--peer-index` files, `validate` additionally checks that non-optional references resolve and that a canonical QB
+depends on canonical peers. Without them only structure is checked.
