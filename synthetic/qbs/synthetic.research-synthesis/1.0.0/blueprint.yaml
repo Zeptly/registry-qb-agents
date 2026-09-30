@@ -436,6 +436,13 @@ attestations:
   - type: evaluation
     ref: evidence://synthetic-example/eval-runs/research-synthesis/1.0.0/canonical-1
     subjectDigest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+    # SYNTHETIC: suite binding added by the local defect-remediation pass. No real evaluation was run; this fixture merely
+    # claims the evaluation assessed exactly the suite below (evals/suite.yaml, digest as stored in the release payload).
+    suite:
+      registry: qb-agents
+      id: synthetic.research-synthesis
+      version: 1.0.0
+      digest: sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3
     capturedAt: 2026-09-28T10:00:00Z
     synthetic: true
     gate: canonical

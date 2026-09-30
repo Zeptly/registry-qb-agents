@@ -15,6 +15,8 @@ references:
 
 * `spec` sections name ids only (`delegation.executionAgents.allow`, `tinyAgents.allowedTemplates`, `allowedSkills`,
   rule targets); the registry is implied by the field and every id MUST be declared in `references` (`E_REF_UNDECLARED`).
+* **Prerelease policy** (one policy, local to this registry — not a cross-registry rule): `versionSatisfies` = semver `satisfies`
+  *without* `includePrerelease`. `^1.0.0` does not admit `1.1.0-rc.1`; `^1.1.0-rc.0` does. The peer-index validator and the resolver share it.
 * `qb-agents` references are rejected: nested QB execution is disabled (`E_NESTED_QB`).
 * Capabilities and gateway contracts are **not** registries. They are opaque platform tokens (`capability:…`, `gateway:…`)
   whose namespace ownership is unresolved. They are validated by shape only.

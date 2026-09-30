@@ -1786,6 +1786,31 @@
             "type": "string",
             "minLength": 5,
             "maxLength": 600
+          },
+          "suite": {
+            "description": "Evaluation attestations bind to the exact evaluation suite assessed: the suite's own identity (registry/id/version, as in evals/suite.yaml `metadata`) plus its canonical suite digest (the same digest stored in the release payload). A suite change makes the evaluation stale even when the artifact digest is unchanged.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version",
+              "digest"
+            ],
+            "properties": {
+              "registry": {
+                "const": "qb-agents"
+              },
+              "id": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+              },
+              "version": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+              },
+              "digest": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+              }
+            }
           }
         },
         "allOf": [
@@ -1801,7 +1826,8 @@
               "required": [
                 "gate",
                 "result",
-                "metrics"
+                "metrics",
+                "suite"
               ]
             }
           }

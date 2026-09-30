@@ -38,26 +38,85 @@ export function compareCodePoints(a, b) {
   return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
 }
 const toLF = (s) => s.replace(/\r\n?/g, "\n");
+const ptr = (p) => (p.length ? "/" + p.map((x) => String(x).replace(/~/g, "~0").replace(/\//g, "~1")).join("/") : "");
+
+/** Controlled rejection of data that cannot be canonicalised or hashed. `diagnostics` = [{code, path, message}] (path = JSON pointer). */
+export class DataRejectedError extends TypeError {
+  constructor(diagnostics) {
+    super(`invalid data: ${diagnostics.slice(0, 3).map((d) => `${d.path || "/"} ${d.message}`).join("; ")}${diagnostics.length > 3 ? ` (+${diagnostics.length - 3} more)` : ""}`);
+    this.name = "DataRejectedError";
+    this.diagnostics = diagnostics;
+  }
+}
+const MAX_DATA_DEPTH = 128;
+const bad = (p, message, code = "E_DATA_TYPE") => ({ code, path: ptr(p), message });
+const typeLabel = (v) => (v === undefined ? "undefined" : typeof v !== "object" ? typeof v : (v.constructor?.name ?? "object"));
+/**
+ * Validates that a parsed value is supported JSON data BEFORE it is cloned or hashed: null, boolean, string, finite number,
+ * array (no holes), plain object. NaN, Infinity, undefined, bigint, symbols, functions, Date/Map/Set/Buffer/class instances and
+ * excessive nesting (or cycles) are reported with their JSON-pointer path. Never converts or drops anything.
+ */
+export function findInvalidData(value, p = [], out = [], depth = 0) {
+  if (depth > MAX_DATA_DEPTH) { out.push(bad(p, `nesting deeper than ${MAX_DATA_DEPTH} levels (or a reference cycle)`)); return out; }
+  if (value === null) return out;
+  switch (typeof value) {
+    case "string": case "boolean": return out;
+    case "number":
+      if (!Number.isFinite(value)) out.push(bad(p, `non-finite number (${String(value)}) is not supported`));
+      return out;
+    case "object": {
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) { if (!(i in value)) out.push(bad([...p, i], "array hole is not supported")); else findInvalidData(value[i], [...p, i], out, depth + 1); }
+        return out;
+      }
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) { out.push(bad(p, `unsupported value of type ${typeLabel(value)}`)); return out; }
+      for (const k of Object.keys(value)) findInvalidData(value[k], [...p, k], out, depth + 1);
+      return out;
+    }
+    default: out.push(bad(p, `unsupported value of type ${typeLabel(value)}`)); return out;
+  }
+}
+const copyData = (v) => {
+  if (Array.isArray(v)) return v.map(copyData);
+  if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v)) Object.defineProperty(o, k, { value: copyData(v[k]), enumerable: true, writable: true, configurable: true }); return o; }
+  return v;
+};
+/** Validating deep clone (replaces JSON.parse(JSON.stringify(x)), which silently turns Infinity into null and mangles non-JSON values). */
+export function cloneCanonicalData(value) {
+  const invalid = findInvalidData(value);
+  if (invalid.length) throw new DataRejectedError(invalid);
+  return copyData(value);
+}
 
 /**
  * Canonical JSON (see docs/canonicalization.md): UTF-8, no insignificant whitespace, object keys sorted by code point,
  * array order preserved, numbers via ECMAScript Number-to-String (finite only), string values and keys normalised to LF line
- * endings. Anything that is not JSON data (undefined, functions, NaN, Infinity, bigint, symbols) throws.
+ * endings. Anything that is not supported JSON data throws DataRejectedError (a TypeError) naming the offending path.
  */
-export function canonicalize(v) {
+export function canonicalize(v) { return ser(v, [], 0); }
+function ser(v, p, depth) {
+  if (depth > MAX_DATA_DEPTH) throw new DataRejectedError([bad(p, `nesting deeper than ${MAX_DATA_DEPTH} levels (or a reference cycle)`)]);
   if (v === null) return "null";
   switch (typeof v) {
     case "string": return JSON.stringify(toLF(v));
     case "boolean": return v ? "true" : "false";
     case "number":
-      if (!Number.isFinite(v)) throw new TypeError("canonical JSON: non-finite number");
+      if (!Number.isFinite(v)) throw new DataRejectedError([bad(p, `non-finite number (${String(v)}) is not supported`)]);
       return JSON.stringify(v);
-    case "object":
-      if (Array.isArray(v)) return `[${v.map(canonicalize).join(",")}]`;
-    { const keys = Object.keys(v).map((k) => [toLF(k), k]).sort((x, y) => compareCodePoints(x[0], y[0]));
-      for (let i = 1; i < keys.length; i++) if (keys[i][0] === keys[i - 1][0]) throw new TypeError("canonical JSON: duplicate key after line-ending normalisation");
-      return `{${keys.map(([nk, k]) => `${JSON.stringify(nk)}:${canonicalize(v[k])}`).join(",")}}`; }
-    default: throw new TypeError(`canonical JSON: unsupported type ${typeof v}`);
+    case "object": {
+      if (Array.isArray(v)) {
+        const parts = [];
+        for (let i = 0; i < v.length; i++) { if (!(i in v)) throw new DataRejectedError([bad([...p, i], "array hole is not supported")]); parts.push(ser(v[i], [...p, i], depth + 1)); }
+        return `[${parts.join(",")}]`;
+      }
+      const proto = Object.getPrototypeOf(v);
+      if (proto !== Object.prototype && proto !== null) throw new DataRejectedError([bad(p, `unsupported value of type ${typeLabel(v)}`)]);
+      const keys = Object.keys(v).map((k) => [toLF(k), k]).sort((x, y) => compareCodePoints(x[0], y[0]));
+      for (let i = 1; i < keys.length; i++) if (keys[i][0] === keys[i - 1][0]) throw new DataRejectedError([bad(p, "duplicate key after line-ending normalisation")]);
+      return `{${keys.map(([nk, k]) => `${JSON.stringify(nk)}:${ser(v[k], [...p, k], depth + 1)}`).join(",")}}`;
+    }
+    default: throw new DataRejectedError([bad(p, `unsupported value of type ${typeLabel(v)}`)]);
   }
 }
 export const sha256 = (s) => "sha256:" + crypto.createHash("sha256").update(s, "utf8").digest("hex");
@@ -66,10 +125,11 @@ export const sha256 = (s) => "sha256:" + crypto.createHash("sha256").update(s, "
  * Artifact digest: sha256 of canonical JSON of the artifact EXCLUDING metadata.version, metadata.maturity, metadata.lifecycle,
  * security.approvals and attestations. Included: kind/apiVersion, identity (metadata.id/registry/origin/...), spec,
  * references, provenance and security classification/capabilities. Attestations and approvals bind to this digest, so they
- * cannot be inside it; the version is bound by the directory seal and the index entry instead.
+ * cannot be inside it; the version is bound by the directory seal and the index entry instead. Throws DataRejectedError for
+ * unsupported data (NaN/Infinity/non-JSON values) instead of coercing it.
  */
 export function artifactDigest(bp) {
-  const c = JSON.parse(JSON.stringify(bp));
+  const c = cloneCanonicalData(bp); // validates supported types first; never coerces (no JSON round trip)
   if (c.metadata) { delete c.metadata.version; delete c.metadata.maturity; delete c.metadata.lifecycle; }
   if (c.security) delete c.security.approvals;
   delete c.attestations;
@@ -90,7 +150,55 @@ export function directorySeal(bp, suite) {
   return { payload, seal };
 }
 
-export const parseYaml = (text) => YAML.parse(text, { schema: "core", uniqueKeys: true });
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+/**
+ * True when a numeric SOURCE literal denotes an integer value outside +/-(2^53-1). Decides from the literal text (decimal, 0x, 0o,
+ * fraction and exponent forms) using exact BigInt arithmetic, before any double rounding. Fractional literals (e.g. 0.5, 1e-7,
+ * 123456789012345678.5) and in-range integers (e.g. 1e3, 9007199254740991, 1.0) are accepted.
+ */
+export function unsafeIntegerLiteral(src) {
+  const t = String(src).trim();
+  if (/^[-+]?(0x[0-9a-fA-F]+|0o[0-7]+)$/.test(t)) return BigInt(t.replace(/^[-+]/, "")) > MAX_SAFE;
+  const m = /^[-+]?(\d*)(?:\.(\d*))?(?:[eE]([-+]?)(\d+))?$/.exec(t);
+  if (!m) return false; // not a plain decimal literal (e.g. .inf / .nan: rejected separately as non-finite)
+  const [, ip = "", fp = "", esign = "+", edigits = "0"] = m;
+  let D = (ip + fp).replace(/^0+/, "");
+  if (D === "") return false; // zero
+  let tz = 0; while (D.endsWith("0")) { D = D.slice(0, -1); tz++; }
+  if (edigits.replace(/^0+/, "").length > 9) return esign !== "-"; // astronomically large exponent: positive => integer far outside range; negative => fractional
+  let e = BigInt(edigits) * (esign === "-" ? -1n : 1n) - BigInt(fp.length) + BigInt(tz);
+  if (e < 0n) return false; // has a non-zero fractional part
+  if (e + BigInt(D.length) - 1n > 15n) return true; // >= 1e16 > 2^53
+  return BigInt(D) * 10n ** e > MAX_SAFE;
+}
+function scanNumberLiterals(doc) {
+  const out = [];
+  const check = (n, p, what) => {
+    if (YAML.isScalar(n) && typeof n.value === "number" && Number.isFinite(n.value) && typeof n.source === "string" && unsafeIntegerLiteral(n.source)) {
+      out.push(bad(p, `${what} ${n.source} is an integer outside the safe integer range (+/-9007199254740991) and would be rounded silently; use a value within range or quote it as a string`, "E_UNSAFE_INTEGER"));
+    }
+  };
+  const walk = (n, p) => {
+    if (YAML.isMap(n)) for (const pair of n.items) { const k = YAML.isScalar(pair.key) ? String(pair.key.source ?? pair.key.value) : "?"; check(pair.key, [...p, k], "mapping key"); walk(pair.value, [...p, k]); }
+    else if (YAML.isSeq(n)) n.items.forEach((x, i) => walk(x, [...p, i]));
+    else check(n, p, "numeric literal");
+  };
+  walk(doc.contents, []);
+  return out;
+}
+/**
+ * Parses YAML 1.2 (core schema, unique keys). Rejects, with controlled DataRejectedError diagnostics, unsafe integer literals
+ * (checked on the source text before rounding), non-finite numbers and unsupported value types (!!binary etc.).
+ */
+export function parseYaml(text) {
+  const doc = YAML.parseDocument(text, { schema: "core", uniqueKeys: true });
+  if (doc.errors.length) throw doc.errors[0];
+  const problems = scanNumberLiterals(doc);
+  const value = doc.toJS();
+  problems.push(...findInvalidData(value));
+  if (problems.length) throw new DataRejectedError(problems);
+  return value;
+}
 const readYaml = (file) => parseYaml(fs.readFileSync(file, "utf8"));
 
 function walkStrings(node, cb, p = []) {
@@ -154,7 +262,7 @@ export function loadRegistry(root) {
         walkVersion(dir, "", entry);
         const load = (name) => {
           if (!entry.files.includes(name)) return undefined;
-          const f = path.join(dir, name), st = fs.lstatSync(f), ferr = (code, message) => entry.errors.push({ code, file: `${vRel}/${name}`, message });
+          const f = path.join(dir, name), st = fs.lstatSync(f), ferr = (code, message, where) => entry.errors.push({ code, file: `${vRel}/${name}`, ...(where !== undefined ? { where } : {}), message });
           if (st.isSymbolicLink() || !st.isFile()) return null; // already reported by walkVersion
           if (st.size > MAX_FILE_BYTES) { ferr("E_SIZE", `file is ${st.size} bytes; the limit is ${MAX_FILE_BYTES}`); return null; }
           const buf = fs.readFileSync(f);
@@ -162,12 +270,14 @@ export function loadRegistry(root) {
           const text = buf.toString("utf8");
           if (!Buffer.from(text, "utf8").equals(buf) || text.charCodeAt(0) === 0xfeff) { ferr("E_ENCODING", "file must be UTF-8 without BOM"); return null; }
           if (text.includes("\r")) ferr("E_LINE_ENDING", "CR characters are not allowed; registry files use LF line endings");
-          try {
-            const doc = parseYaml(text);
-            const why = isRuntimePayload(doc);
-            if (why) { ferr("E_RUNTIME_ARTIFACT", `content looks like a runtime artifact: ${why}. Raw tapes, traces and transcripts must stay in the evidence store`); return null; }
-            return doc;
-          } catch (e) { ferr("E_YAML", e.message); return null; }
+          let doc;
+          try { doc = parseYaml(text); } catch (e) {
+            if (e instanceof DataRejectedError) { for (const d of e.diagnostics) ferr(d.code, d.message, d.path); } else ferr("E_YAML", e.message);
+            return null;
+          }
+          const why = isRuntimePayload(doc);
+          if (why) { ferr("E_RUNTIME_ARTIFACT", `content looks like a runtime artifact: ${why}. Raw tapes, traces and transcripts must stay in the evidence store`); return null; }
+          return doc;
         };
         entry.blueprint = load("blueprint.yaml");
         entry.suite = load("evals/suite.yaml");
@@ -210,6 +320,32 @@ function lintLiterals(bp, err) {
 }
 
 // ---------- per-version validation ----------
+/**
+ * Secret and endpoint lint for accepted SIDECAR files (evals/suite.yaml, evidence/refs.yaml, lifecycle.yaml, release.yaml).
+ * Scans every string value (and mapping key) for credentials (E_SECRET) and for http(s) URLs / infrastructure hosts (E_ENDPOINT).
+ * Scoped exemptions only: `endpointAllowed(path)` marks designated pointer fields (they are still secret-scanned), `$schema` / `$id`
+ * keys are schema identifiers and skipped, and `evidence://` pointers are not http(s) URLs. This is not a blanket URL ban.
+ */
+export function lintSidecar(doc, err, endpointAllowed = () => false) {
+  const visit = (s, p) => {
+    const where = ptr(p);
+    if (SECRET_RES.some((r) => r.test(s))) err("E_SECRET", where, "value looks like a credential");
+    if (!endpointAllowed(p) && (URL_RE.test(s) || INFRA_HOST_RE.test(s))) err("E_ENDPOINT", where, "http(s) URLs and infrastructure hosts are not allowed here; use an evidence:// pointer or a designated pointer field");
+  };
+  const walk = (n, p) => {
+    if (typeof n === "string") visit(n, p);
+    else if (Array.isArray(n)) n.forEach((x, i) => walk(x, [...p, i]));
+    else if (n && typeof n === "object") for (const [k, x] of Object.entries(n)) { if (k === "$schema" || k === "$id") continue; visit(k, [...p, k]); walk(x, [...p, k]); }
+  };
+  walk(doc, []);
+}
+const SIDECAR_POINTER_FIELDS = {
+  "evals/suite.yaml": () => false,
+  "lifecycle.yaml": () => false,
+  "evidence/refs.yaml": (p) => p[0] === "refs" && typeof p[1] === "number" && p[2] === "uri", // evidence:// pointer field
+  "release.yaml": (p) => p.length === 1 && p[0] === "promotionRef", // governance transport reference (e.g. a pull request)
+};
+
 export function validateVersion(v, ctx) {
   const { errors, warnings } = v;
   const bp = v.blueprint;
@@ -221,6 +357,11 @@ export function validateVersion(v, ctx) {
   for (const f of v.files) if (!ALLOWED_FILES.has(f)) err("E_UNEXPECTED_FILE", "", `${f} is not on the filename allow-list (${[...ALLOWED_FILES].join(", ")}). Raw tapes, traces, transcripts and runtime payloads must stay in the evidence store, never in Git`, f);
   for (const f of v.symlinks) err("E_SYMLINK", "", "symbolic links are not allowed in registry artifacts", f);
   if (v.bytes > MAX_VERSION_BYTES) err("E_SIZE", "", `version directory is ${v.bytes} bytes; the limit is ${MAX_VERSION_BYTES}`, ".");
+
+  // accepted sidecars are scanned for secrets/endpoints even when the blueprint itself is unusable
+  for (const [name, doc] of [["evals/suite.yaml", v.suite], ["evidence/refs.yaml", v.refs], ["lifecycle.yaml", v.overlay], ["release.yaml", v.release]]) {
+    if (doc) lintSidecar(doc, (code, where, message) => err(code, where, message, name), SIDECAR_POINTER_FIELDS[name]);
+  }
 
   if (bp === undefined) { if (!v.symlinks.includes("blueprint.yaml")) err("E_MISSING", "", "blueprint.yaml is missing"); return; }
   if (bp === null) return;
@@ -355,9 +496,17 @@ export function validateVersion(v, ctx) {
 
   // ---- evaluation suite ----
   if (v.suite) {
-    for (const m of schemaErrors("suite", v.suite)) err("E_SCHEMA", "", m, "evals/suite.yaml");
-    if (!errors.some((e) => e.file === file("evals/suite.yaml"))) {
+    const suiteSchema = schemaErrors("suite", v.suite);
+    for (const m of suiteSchema) err("E_SCHEMA", "", m, "evals/suite.yaml");
+    if (!suiteSchema.length) {
       const s = v.suite;
+      const curSuiteDigest = suiteDigest(s);
+      // evaluation attestations must name and bind the exact suite assessed (identity = the suite's own metadata triple; digest = suiteDigest)
+      bp.attestations.forEach((a, i) => {
+        if (a.type !== "evaluation" || !a.suite) return;
+        if (a.suite.registry !== s.metadata.registry || a.suite.id !== s.metadata.id || a.suite.version !== s.metadata.version) err("E_SUITE_MISMATCH", `/attestations/${i}/suite`, `evaluation names suite ${a.suite.id}@${a.suite.version} but evals/suite.yaml is ${s.metadata.id}@${s.metadata.version}`);
+        else if (a.suite.digest !== curSuiteDigest) err("E_SUITE_STALE", `/attestations/${i}/suite/digest`, `evaluation assessed suite ${a.suite.digest} but the current suite digest is ${curSuiteDigest}; re-run the evaluation against the current suite (resealing does not refresh it)`);
+      });
       if (s.metadata.id !== id || s.metadata.version !== md.version) err("E_SUITE", "/metadata", `suite targets ${s.metadata.id}@${s.metadata.version}, expected ${id}@${md.version}`, "evals/suite.yaml");
       if (s.synthetic !== isSynthetic) err("E_SYNTHETIC", "/synthetic", isSynthetic ? "synthetic artifacts must ship a synthetic suite" : "synthetic suites are only allowed for synthetic artifacts", "evals/suite.yaml");
       if (isSynthetic) (s.datasets ?? []).forEach((ds) => { if (!ds.id.startsWith("dataset:synthetic-example/")) err("E_SYNTHETIC", "/datasets", `synthetic suites may only use dataset:synthetic-example/* (got ${ds.id})`, "evals/suite.yaml"); });
@@ -376,7 +525,7 @@ export function validateVersion(v, ctx) {
       if (s.baseline && parent && (s.baseline.ref.id !== parent.id || s.baseline.ref.version !== parent.version)) warn("W_SUITE", "/baseline", "baseline differs from origin.evolution.sourceRefs[0]", "evals/suite.yaml");
       if (parent && !s.baseline) warn("W_SUITE", "/baseline", "an evolved version should declare a baseline", "evals/suite.yaml");
     }
-  } else if (bp.attestations.some((a) => a.type === "evaluation")) err("E_SUITE", "", "evaluation attestations require evals/suite.yaml", "evals/suite.yaml");
+  } else if (v.suite === undefined && bp.attestations.some((a) => a.type === "evaluation")) err("E_SUITE", "", "evaluation attestations require evals/suite.yaml", "evals/suite.yaml");
 
   // every passing evaluation attestation must actually meet the gate it claims
   bp.attestations.forEach((a, i) => {
@@ -390,8 +539,9 @@ export function validateVersion(v, ctx) {
 
   // ---- evidence pointers ----
   if (v.refs) {
-    for (const m of schemaErrors("refs", v.refs)) err("E_SCHEMA", "", m, "evidence/refs.yaml");
-    if (!errors.some((e) => e.file === file("evidence/refs.yaml"))) {
+    const refsSchema = schemaErrors("refs", v.refs);
+    for (const m of refsSchema) err("E_SCHEMA", "", m, "evidence/refs.yaml");
+    if (!refsSchema.length) {
       if (v.refs.metadata.id !== id || v.refs.metadata.version !== md.version) err("E_EVIDENCE", "/metadata", "evidence refs target a different artifact version", "evidence/refs.yaml");
       const seen = new Set();
       v.refs.refs.forEach((r) => {
@@ -407,8 +557,9 @@ export function validateVersion(v, ctx) {
   // ---- lifecycle overlay (append-only; independent of maturity and origin) ----
   let effective = "active";
   if (v.overlay) {
-    for (const m of schemaErrors("lifecycle", v.overlay)) err("E_SCHEMA", "", m, "lifecycle.yaml");
-    if (!errors.some((e) => e.file === file("lifecycle.yaml"))) {
+    const overlaySchema = schemaErrors("lifecycle", v.overlay);
+    for (const m of overlaySchema) err("E_SCHEMA", "", m, "lifecycle.yaml");
+    if (!overlaySchema.length) {
       if (v.overlay.metadata.id !== id || v.overlay.metadata.version !== md.version) err("E_LIFECYCLE", "/metadata", "overlay targets a different artifact version", "lifecycle.yaml");
       let prev = null;
       for (const [i, e] of v.overlay.entries.entries()) {
@@ -424,21 +575,24 @@ export function validateVersion(v, ctx) {
 
   // ---- maturity ----
   if (md.maturity === "candidate") {
-    if (v.release) err("E_RELEASE", "", "release record present on a candidate", "release.yaml");
+    if (v.release !== undefined) err("E_RELEASE", "", "release record present on a candidate", "release.yaml");
   } else {
-    if (!v.release) err("E_RELEASE", "", "canonical versions require a release record (npm run seal)", "release.yaml");
-    else {
+    if (v.release === undefined) err("E_RELEASE", "", "canonical versions require a release record (npm run seal)", "release.yaml");
+    else if (v.release !== null) {
       for (const m of schemaErrors("release", v.release)) err("E_SCHEMA", "", m, "release.yaml");
       if (v.release.metadata?.id !== id || v.release.metadata?.version !== md.version) err("E_RELEASE", "/metadata", "release record identity mismatch", "release.yaml");
       if (v.release.digest !== digest) err("E_DIGEST", "/digest", `artifact changed after release (release ${v.release.digest}, computed ${digest})`, "release.yaml");
+      if (v.suite !== null) { // a rejected (invalid-data) suite already has diagnostics; its seal cannot be computed
       const { payload, seal } = directorySeal(bp, v.suite);
       v.directorySeal = seal;
       for (const p of payload) { const rp = v.release.payload?.find((x) => x.path === p.path); if (!rp || rp.digest !== p.digest) err("E_SEAL", `/payload/${p.path}`, `payload file ${p.path} changed after release`, "release.yaml"); }
       if (v.release.payload && v.release.payload.length !== payload.length) err("E_SEAL", "/payload", "release payload file list differs from the canonical payload files", "release.yaml");
       if (v.release.directorySeal !== seal) err("E_SEAL", "/directorySeal", `directory seal mismatch (release ${v.release.directorySeal}, computed ${seal})`, "release.yaml");
+      }
     }
-    if (!v.suite) err("E_SUITE", "", "canonical versions require evals/suite.yaml", "evals/suite.yaml");
-    if (!bp.attestations.some((a) => a.type === "evaluation" && a.gate === "canonical" && a.result === "pass" && a.subjectDigest === digest)) err("E_PROMOTION", "/attestations", "canonical requires a passing evaluation attestation for gate `canonical` bound to the current digest");
+    if (v.suite === undefined) err("E_SUITE", "", "canonical versions require evals/suite.yaml", "evals/suite.yaml");
+    const curSuite = v.suite ? suiteDigest(v.suite) : null;
+    if (!bp.attestations.some((a) => a.type === "evaluation" && a.gate === "canonical" && a.result === "pass" && a.subjectDigest === digest && curSuite && a.suite?.digest === curSuite && a.suite?.id === v.suite.metadata?.id && a.suite?.version === v.suite.metadata?.version)) err("E_PROMOTION", "/attestations", "canonical requires a passing evaluation attestation for gate `canonical` bound to the current artifact digest AND the current evaluation suite (id, version, digest)");
     if (!bp.security.approvals.some((a) => a.type === "security-review" && a.actor.type === "human" && a.subjectDigest === digest)) err("E_PROMOTION", "/security/approvals", "canonical requires a human security-review approval bound to the current digest");
     if (!bp.security.approvals.some((a) => a.type === "release-approval" && a.actor.type === "human" && a.subjectDigest === digest)) err("E_PROMOTION", "/security/approvals", "canonical requires a human release-approval bound to the current digest");
   }
@@ -446,8 +600,7 @@ export function validateVersion(v, ctx) {
   // ---- peer resolution (optional, offline-safe, local index files only) ----
   if (ctx.peers.length) {
     for (const r of bp.references) {
-      const range = semver.validRange(r.version);
-      const cand = ctx.peers.filter((p) => p.registry === r.registry && p.id === r.id && range && semver.satisfies(p.version, range, { includePrerelease: true }) && p.lifecycle !== "revoked");
+      const cand = ctx.peers.filter((p) => p.registry === r.registry && p.id === r.id && versionSatisfies(p.version, r.version) && p.lifecycle !== "revoked");
       if (!cand.length) { (r.optional ? warn : err)("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, `no non-revoked ${r.registry}/${r.id} satisfies ${r.version} in the supplied indexes`); continue; }
       if (md.maturity === "canonical" && !r.optional && !cand.some((p) => p.maturity === "canonical")) err("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, "a canonical QB requires canonical dependencies");
       if (r.digest && !cand.some((p) => p.digest === r.digest)) err("E_DIGEST", `/references/${r.registry}/${r.id}`, "pinned digest matches no resolvable version");
@@ -511,6 +664,17 @@ export function detectWidening(a, b) {
   return out;
 }
 
+// ---------- version eligibility (single local policy shared by the resolver and the peer-index validator) ----------
+/**
+ * Local policy: npm semver semantics WITHOUT includePrerelease. A prerelease version (e.g. 1.1.0-rc.1) satisfies a range only when
+ * the range itself contains a comparator with a prerelease tag on the same major.minor.patch (^1.1.0-rc.0 admits 1.1.0-rc.1;
+ * ^1.0.0 does not). Not a cross-registry policy.
+ */
+export function versionSatisfies(version, range) {
+  const r = semver.validRange(range);
+  return Boolean(r) && semver.satisfies(version, r);
+}
+
 // ---------- top-level ----------
 export function loadRegistries() {
   const cfg = readYaml(path.join(PKG_ROOT, "registries.yaml"));
@@ -548,8 +712,12 @@ export function scanRuntimeArtifacts(root) {
 export function validateAll({ root = PKG_ROOT, peerIndexFiles = [] } = {}) {
   const ctx = { registries: loadRegistries(), peers: loadPeerIndexes(peerIndexFiles) };
   const all = loadRegistry(root);
-  for (const v of all) validateVersion(v, ctx);
-  validateLineage(all);
+  const controlled = (v, e, where) => {
+    if (e instanceof DataRejectedError) for (const d of e.diagnostics) v.errors.push({ code: d.code, file: `${v.rel}/blueprint.yaml`, where: d.path, message: d.message });
+    else v.errors.push({ code: "E_INTERNAL", file: `${v.rel}/${where}`, where: "", message: `unexpected ${e?.constructor?.name ?? "error"}: ${e?.message ?? e}` });
+  };
+  for (const v of all) { try { validateVersion(v, ctx); } catch (e) { controlled(v, e, "blueprint.yaml"); } }
+  try { validateLineage(all); } catch (e) { if (all[0]) controlled(all[0], e, "blueprint.yaml"); else throw e; }
   const seen = new Map();
   for (const v of all) {
     if (!v.blueprint?.metadata) continue;
@@ -588,7 +756,7 @@ export function resolveRef(ref, entries) {
   const range = semver.validRange(ref.version);
   if (!range) return { status: "unresolved", reason: "invalid-range" };
   if (!entries.some((e) => e.registry === ref.registry)) return { status: "unresolved", reason: "peer-index-unavailable" };
-  const c = entries.filter((e) => e.registry === ref.registry && e.id === ref.id && e.maturity === "canonical" && e.lifecycle !== "revoked" && semver.satisfies(e.version, range));
+  const c = entries.filter((e) => e.registry === ref.registry && e.id === ref.id && e.maturity === "canonical" && e.lifecycle !== "revoked" && versionSatisfies(e.version, ref.version));
   if (!c.length) return { status: "unresolved", reason: "no-satisfying-version" };
   c.sort((a, b) => semver.rcompare(a.version, b.version));
   const hit = c[0];
@@ -618,16 +786,33 @@ export function checkImmutability({ root = PKG_ROOT, baseRef }) {
   const errors = [];
   const roots = Object.values(SCOPES);
   const tree = roots.flatMap((r) => git(root, ["ls-tree", "-r", "--name-only", baseRef, "--", r]).split("\n").filter(Boolean));
+  // never throw on unparseable/invalid content: report controlled file/path diagnostics and keep checking other files
+  const parse = (text, file) => {
+    try { return { doc: parseYaml(text) }; } catch (e) {
+      if (e instanceof DataRejectedError) for (const d of e.diagnostics) errors.push({ code: d.code, file, where: d.path, message: d.message });
+      else errors.push({ code: "E_YAML", file, message: e.message });
+      return null;
+    }
+  };
+  const IDENTITY = ["id", "registry", "version"];
+  const sameIdentity = (a, b) => IDENTITY.every((k) => a?.metadata?.[k] === b?.metadata?.[k]);
   for (const rel of tree.filter((f) => /\/blueprint\.yaml$/.test(f))) {
     const dir = path.posix.dirname(rel);
     const err = (code, file, message) => errors.push({ code, file, message });
-    const before = parseYaml(gitShow(root, baseRef, rel));
+    const beforeP = parse(gitShow(root, baseRef, rel), rel);
+    if (!beforeP) continue;
+    const before = beforeP.doc;
     const m0 = before?.metadata?.maturity;
     const headFile = path.join(root, rel);
     if (!fs.existsSync(headFile)) { if (m0 === "canonical") err("E_IMMUTABLE", rel, "canonical version cannot be deleted; revoke it via the lifecycle overlay"); continue; }
-    const after = readYaml(headFile);
+    const afterP = parse(fs.readFileSync(headFile, "utf8"), rel);
+    if (!afterP) continue;
+    const after = afterP.doc;
     if (m0 === "canonical" && after.metadata?.maturity !== "canonical") err("E_TRANSITION", rel, "a canonical version cannot return to candidate");
     if (m0 === "canonical") {
+      // identity (id, registry, version) is immutable. The artifact digest deliberately excludes metadata.version, so it is compared explicitly:
+      // a version-only mutation (directory name unchanged) is caught here. metadata.lifecycle/maturity are NOT identity and are handled separately.
+      for (const k of IDENTITY) if (before.metadata?.[k] !== after.metadata?.[k]) err("E_IMMUTABLE", rel, `canonical identity field metadata.${k} changed (${before.metadata?.[k]} -> ${after.metadata?.[k]}); identity is immutable, publish a new version instead`);
       if (artifactDigest(before) !== artifactDigest(after)) err("E_IMMUTABLE", rel, "canonical artifact content changed; publish a new version instead");
       if (!appendOnly(before.attestations, after.attestations)) err("E_IMMUTABLE", rel, "attestations are append-only on canonical versions");
       if (!appendOnly(before.security?.approvals, after.security?.approvals)) err("E_IMMUTABLE", rel, "security approvals are append-only on canonical versions");
@@ -635,19 +820,24 @@ export function checkImmutability({ root = PKG_ROOT, baseRef }) {
         const name = f.slice(dir.length + 1);
         const head = path.join(root, f);
         if (!fs.existsSync(head)) { err("E_IMMUTABLE", f, "file of a canonical version was deleted"); continue; }
-        const b = parseYaml(gitShow(root, baseRef, f)), h = readYaml(head);
-        if (name === "evidence/refs.yaml") { if (!appendOnly(b?.refs, h?.refs)) err("E_IMMUTABLE", f, "evidence refs are append-only"); }
-        else if (name === "lifecycle.yaml") { /* checked below for every version */ }
-        else if (canonicalize(b) !== canonicalize(h)) err("E_IMMUTABLE", f, "file of a canonical version changed");
+        const bP = parse(gitShow(root, baseRef, f), f), hP = parse(fs.readFileSync(head, "utf8"), f);
+        if (!bP || !hP) continue;
+        const b = bP.doc, h = hP.doc;
+        if (name === "evidence/refs.yaml") {
+          if (!sameIdentity(b, h)) err("E_IMMUTABLE", f, "evidence refs identity (metadata id/registry/version) changed on a canonical version");
+          if (!appendOnly(b?.refs, h?.refs)) err("E_IMMUTABLE", f, "evidence refs are append-only");
+        } else if (name === "lifecycle.yaml") {
+          if (!sameIdentity(b, h)) err("E_IMMUTABLE", f, "lifecycle overlay identity (metadata id/registry/version) changed on a canonical version"); // entries checked below
+        } else if (canonicalize(b) !== canonicalize(h)) err("E_IMMUTABLE", f, "file of a canonical version changed");
       }
     }
     // lifecycle overlay: append-only for every version, with legal transitions
     const ovRel = `${dir}/lifecycle.yaml`;
     if (tree.includes(ovRel)) {
-      const b = parseYaml(gitShow(root, baseRef, ovRel))?.entries ?? [];
+      const bP = parse(gitShow(root, baseRef, ovRel), ovRel);
       const hf = path.join(root, ovRel);
       if (!fs.existsSync(hf)) err("E_IMMUTABLE", ovRel, "lifecycle overlay cannot be deleted");
-      else if (!appendOnly(b, readYaml(hf)?.entries ?? [])) err("E_IMMUTABLE", ovRel, "lifecycle overlay is append-only; existing entries were changed or removed");
+      else { const hP = parse(fs.readFileSync(hf, "utf8"), ovRel); if (bP && hP && !appendOnly(bP.doc?.entries ?? [], hP.doc?.entries ?? [])) err("E_IMMUTABLE", ovRel, "lifecycle overlay is append-only; existing entries were changed or removed"); }
     }
   }
   return errors;

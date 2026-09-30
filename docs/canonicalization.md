@@ -8,6 +8,14 @@ One policy for every digest in this registry. Implemented in `scripts/lib/core.m
 
 1. Input is parsed data (YAML `core` schema, unique keys). Only JSON data types are allowed; `undefined`, functions, `NaN`,
    `±Infinity`, bigint and symbols throw.
+   Data is validated **before** any clone or hash: nothing is passed through `JSON.stringify`/`JSON.parse`, so a non-finite
+   number is never silently turned into `null`. Non-plain objects, array holes, cycles and nesting deeper than 128 are also
+   rejected. The validator reports these as controlled `E_DATA_TYPE` diagnostics with file and JSON-pointer path (for example
+   `.inf`, `.nan` or `!!binary` in YAML); `artifactDigest`/`suiteDigest`/`canonicalize` throw `DataRejectedError` carrying the same diagnostics.
+   An unparseable blueprint or suite never crashes the run; one bad version does not hide the others.
+   **Safe integers**: the YAML parser rounds integer literals beyond ±(2^53−1) (and exponent forms such as `9e15+`) before any
+   check could see them, so the literal text of every scalar *and mapping key* is tested exactly (BigInt, decimal/`0x`/`0o`/exponent)
+   and rejected as `E_UNSAFE_INTEGER`. Fractional literals and in-range integers are unchanged. Digest formulas for valid input are unchanged.
 2. Output is UTF-8, with no insignificant whitespace.
 3. Object keys are sorted by **Unicode code point** (`compareCodePoints`; equivalent to UTF-8 byte order). Neither locale
    collation nor UTF-16 code-unit order is used. Keys equal after line-ending normalisation are rejected.

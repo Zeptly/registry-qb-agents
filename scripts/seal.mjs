@@ -6,14 +6,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import YAML from "yaml";
-import { PKG_ROOT, SCOPES, REGISTRY, artifactDigest, directorySeal, parseYaml } from "./lib/core.mjs";
+import { PKG_ROOT, SCOPES, REGISTRY, artifactDigest, directorySeal, parseYaml, DataRejectedError } from "./lib/core.mjs";
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { pr: { type: "string" }, scope: { type: "string", default: "production" } } });
 const m = /^([a-z0-9.-]+)@(.+)$/.exec(positionals[0] ?? "");
 if (!m || !SCOPES[values.scope]) { console.error("usage: seal <id>@<version> [--pr ref] [--scope production|synthetic]"); process.exit(2); }
 const dir = path.join(PKG_ROOT, SCOPES[values.scope], m[1], m[2]);
-const bp = parseYaml(fs.readFileSync(path.join(dir, "blueprint.yaml"), "utf8"));
-const suite = parseYaml(fs.readFileSync(path.join(dir, "evals/suite.yaml"), "utf8"));
+let bp, suite;
+try {
+  bp = parseYaml(fs.readFileSync(path.join(dir, "blueprint.yaml"), "utf8"));
+  suite = parseYaml(fs.readFileSync(path.join(dir, "evals/suite.yaml"), "utf8"));
+} catch (e) {
+  if (e instanceof DataRejectedError) { for (const d of e.diagnostics) console.error(`${d.code} ${d.path || "/"}: ${d.message}`); } else console.error(`cannot read artifact: ${e.message}`);
+  process.exit(1);
+}
 const digest = artifactDigest(bp);
 const { payload, seal } = directorySeal(bp, suite);
 const approvals = (bp.security.approvals ?? []).filter((a) => a.subjectDigest === digest).map(({ type, actor, at }) => ({ type, actor, at }));

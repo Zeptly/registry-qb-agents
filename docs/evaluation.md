@@ -13,8 +13,18 @@ Each version that carries an evaluation attestation, and every canonical version
 * **metrics**, **runs**, **baseline** (`exactRef` of the source version + tolerance).
 * **gates**: `candidate` (optional) and `canonical` (required) thresholds.
 
+## Suite binding
+
+Every `evaluation` attestation carries `suite: {registry, id, version, digest}` (all required; local schema change).
+The identity must equal the suite's `metadata` (`E_SUITE_MISMATCH`) and `digest` must equal the current `suiteDigest`
+(`E_SUITE_STALE`). Because attestations are outside the artifact digest, this is what makes a suite edit stale the evaluation
+even when the blueprint digest is unchanged; resealing the directory alone does not revalidate an old evaluation — a new
+attestation bound to the new suite digest is required. Passing-result and threshold checks (`E_GATE`) are unchanged.
+The synthetic fixtures' `suite` blocks were added by the remediation pass and are labelled in place; no evaluation was run and
+no real evidence exists. Artifact digests, suite digests, release records and directory seals are unchanged.
+
 ## Enforcement
 
 An `evaluation` attestation with `result: pass` must meet every comparison in `gates.<its gate>` (`E_GATE`). Promotion to
-`canonical` requires a passing `canonical`-gate attestation whose `subjectDigest` equals the current digest. Editing the
+`canonical` requires a passing `canonical`-gate attestation whose `subjectDigest` equals the current digest **and** whose `suite` binding matches the current suite. Editing the
 suite after release changes the payload digest and the directory seal and fails validation (`E_SEAL`). Execution of evaluations belongs to the runtime/eval harness.

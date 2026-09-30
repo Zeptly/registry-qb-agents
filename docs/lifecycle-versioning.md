@@ -22,6 +22,9 @@ Three **independent** fields:
 
 Only these may be appended to a canonical version: attestations, security approvals, evidence refs, lifecycle overlay
 entries. Everything else is frozen (`check:immutability`).
+Identity (`metadata.registry`, `id`, `version`) of a canonical version is immutable even when the directory name is unchanged
+(version-only edits are `E_IMMUTABLE`); `maturity`/`lifecycle` are not identity and follow their own rules. Evidence-ref and overlay
+`metadata` identity is also frozen. Unparseable base/head files yield controlled diagnostics.
 
 ## Lifecycle overlay (`lifecycle.yaml`)
 

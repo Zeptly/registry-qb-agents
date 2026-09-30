@@ -11,7 +11,7 @@
 | Runtime tapes / sensitive payloads committed to Git | per-version file allow-list, repo-wide runtime-artifact scan, closed schemas (`E_UNEXPECTED_FILE`, `E_RUNTIME_ARTIFACT`) |
 | Synthetic data mistaken for production | isolated `synthetic/` namespace, `synthetic.` ids, production index schema forbids synthetic entries (`E_SYNTHETIC`) |
 | Privilege creep across versions | default-deny capabilities; widening detection (`W_PERMISSION_WIDENING`) forces ≥ minor bump and security review via CODEOWNERS/PR checklist |
-| Credential or endpoint leakage into Git | validator rejects URLs/hosts/credential-shaped strings (`E_ENDPOINT`, `E_SECRET`); CI secret-scan job; gateways referenced by contract only |
+| Credential or endpoint leakage into Git | validator rejects URLs/hosts/credential-shaped strings (`E_ENDPOINT`, `E_SECRET`) in blueprints, evaluation suites, evidence refs, lifecycle overlays and release records (scoped exemptions: `refs[*].uri`, `promotionRef`, `$schema`/`$id`); CI secret-scan job; gateways referenced by contract only |
 | Coupling to Jev's location / vendor lock-in | `jev.gateway` is a contract ID + version range; models are tiers |
 | Prompt injection via retrieved content | instructions require treating retrieved data as untrusted; handoff minimisation; `external-send` always HITL; `hitl.onTimeout` defaults to deny |
 | Runaway cost / swarms | hard per-run budgets, swarm size ≤ Tiny Agent caps ≤ budget, HITL above threshold, callers may only *lower* budgets |

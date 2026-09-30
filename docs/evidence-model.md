@@ -31,8 +31,13 @@ Enforced: version directories accept only a fixed file allow-list (`E_UNEXPECTED
 ## Attestations
 
 `{type, ref (evidence://…), subjectDigest, capturedAt, synthetic, summary}`; `type: evaluation` adds `gate`
-(`candidate|canonical`), `result` and summary `metrics`. Rules: `subjectDigest` MUST equal the artifact's current digest;
+(`candidate|canonical`), `result`, summary `metrics` and `suite` (`{registry,id,version,digest}` of the exact suite assessed; `E_SUITE_STALE`/`E_SUITE_MISMATCH`). Rules: `subjectDigest` MUST equal the artifact's current digest;
 a `pass` must actually satisfy the suite thresholds for its gate (`E_GATE`). Signing is deferred.
+
+Evaluation suites, evidence refs, lifecycle overlays and release records are linted for credentials (`E_SECRET`) and
+http(s)/infrastructure endpoints (`E_ENDPOINT`) over every string value and key (`$schema`/`$id` are schema identifiers and skipped).
+Permitted pointers only: `evidence/refs.yaml` `refs[*].uri` and `release.yaml` `promotionRef` may hold a URL/PR reference
+(endpoint check only — secrets are still rejected there). There is no blanket URL ban elsewhere beyond the existing rules.
 
 ## Lineage identifiers (provisional runtime contract)
 
