@@ -1,0 +1,12 @@
+# Zeptly Registry Protocol v0.1: registries covered by structured references {registry, id, version, digest?}.
+# This file is an allow-list for the `registry` field. It does not locate files (resolution is by id + version + digest).
+#
+# NOT registries (deferred by the protocol, ownership UNRESOLVED): capability / gateway / model namespaces.
+# Blueprints carry those as OPAQUE platform tokens (e.g. capability:..., gateway:...) that this repo does not interpret.
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: RegistryMap
+registries:
+  skills:           { repo: Zeptly/registry-skills }
+  tiny-agents:      { repo: Zeptly/registry-tiny-agents }
+  execution-agents: { repo: Zeptly/registry-execution-agents }
+  qb-agents:        { repo: Zeptly/registry-qb-agents }

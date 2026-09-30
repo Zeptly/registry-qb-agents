@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:runtime-lock:v1",
+  "title": "RuntimeLock",
+  "description": "Protocol v0.2 RuntimeLock: declared range -> explicit peer-index resolution -> exact version + digest. EVERY declared reference appears in `entries`; unresolved ones carry an explicit code and message. `complete` is true only when every entry resolved. A lock never mixes the production and synthetic domains. No transitive resolution or cycle handling (runtime responsibility).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "digestAlgorithm",
+    "domain",
+    "subject",
+    "complete",
+    "entries"
+  ],
+  "properties": {
+    "apiVersion": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "RuntimeLock"
+    },
+    "digestAlgorithm": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+    },
+    "domain": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/registryName"
+        },
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        },
+        "digest": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+        }
+      }
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requested",
+          "status"
+        ],
+        "properties": {
+          "requested": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "unresolved"
+            ]
+          },
+          "resolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "registry",
+              "id",
+              "version",
+              "digest",
+              "digestAlgorithm"
+            ],
+            "properties": {
+              "registry": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/registryName"
+              },
+              "id": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+              },
+              "version": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+              },
+              "digest": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+              },
+              "digestAlgorithm": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+              }
+            }
+          },
+          "unresolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "enum": [
+                  "no-peer-index",
+                  "invalid-range",
+                  "no-satisfying-version",
+                  "digest-mismatch",
+                  "digest-algorithm-mismatch",
+                  "revoked",
+                  "deprecated-requires-exact-pin",
+                  "candidate-requires-opt-in",
+                  "domain-mismatch"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "resolved"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "resolved"
+              ],
+              "not": {
+                "required": [
+                  "unresolved"
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "unresolved"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "unresolved"
+              ],
+              "not": {
+                "required": [
+                  "resolved"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

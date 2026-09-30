@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:evidence-refs:v1",
+  "title": "QB Evidence References",
+  "description": "Append-only index of POINTERS to supporting machine evidence about (or leading to) one QB version. Raw sessions, tapes and trajectories live in the evidence store, never in Git. Digest-bound assessments are `attestations` in the blueprint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "refs"
+  ],
+  "properties": {
+    "apiVersion": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "QBEvidenceRefs"
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "uri",
+          "capturedAt",
+          "synthetic",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/slug"
+          },
+          "type": {
+            "enum": [
+              "session-sample",
+              "trajectory-set",
+              "incident",
+              "benchmark",
+              "human-review"
+            ]
+          },
+          "uri": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evidenceUri"
+          },
+          "contentDigest": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "redaction": {
+            "enum": [
+              "none",
+              "pseudonymised",
+              "aggregate-only"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 600
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "subjectDigest": {
+            "description": "Digest of the artifact version the evidence was gathered about (often the parent). Informational; not an attestation.",
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "const": "qb-agents"
+        },
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        }
+      }
+    }
+  }
+}

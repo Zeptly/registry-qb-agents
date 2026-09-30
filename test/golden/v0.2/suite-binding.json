@@ -1,0 +1,105 @@
+{
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "generator": "test/golden/v0.2/generate.py (independent implementation)",
+  "suite": {
+    "apiVersion": "registry.zeptly.dev/v1alpha1",
+    "kind": "QBEvalSuite",
+    "metadata": {
+      "registry": "qb-agents",
+      "id": "example.vector",
+      "version": "1.0.0"
+    },
+    "metrics": [
+      {
+        "id": "task-success-rate"
+      }
+    ],
+    "gates": {
+      "canonical": [
+        {
+          "metric": "task-success-rate",
+          "op": ">=",
+          "value": 0.85
+        }
+      ]
+    }
+  },
+  "suiteDigest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db",
+  "changedSuite": {
+    "apiVersion": "registry.zeptly.dev/v1alpha1",
+    "kind": "QBEvalSuite",
+    "metadata": {
+      "registry": "qb-agents",
+      "id": "example.vector",
+      "version": "1.0.0"
+    },
+    "metrics": [
+      {
+        "id": "task-success-rate"
+      }
+    ],
+    "gates": {
+      "canonical": [
+        {
+          "metric": "task-success-rate",
+          "op": ">=",
+          "value": 0.5
+        }
+      ]
+    }
+  },
+  "changedSuiteDigest": "sha256:f35bba283176963bd39d5c5738223cde10e38e933d3e7afb7a66a0687caa3d10",
+  "cases": [
+    {
+      "name": "binding matches the exact suite",
+      "binding": {
+        "id": "example.vector",
+        "version": "1.0.0",
+        "digest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db"
+      },
+      "suite": "suite",
+      "expect": null
+    },
+    {
+      "name": "suite edited after the assessment: same id/version, different digest -> stale",
+      "binding": {
+        "id": "example.vector",
+        "version": "1.0.0",
+        "digest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db"
+      },
+      "suite": "changedSuite",
+      "expect": "E_SUITE_STALE"
+    },
+    {
+      "name": "binding names another suite id",
+      "binding": {
+        "id": "example.other",
+        "version": "1.0.0",
+        "digest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db"
+      },
+      "suite": "suite",
+      "expect": "E_SUITE_MISMATCH"
+    },
+    {
+      "name": "binding names another suite version",
+      "binding": {
+        "id": "example.vector",
+        "version": "1.0.1",
+        "digest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db"
+      },
+      "suite": "suite",
+      "expect": "E_SUITE_MISMATCH"
+    },
+    {
+      "name": "optional registry must match when present",
+      "binding": {
+        "registry": "skills",
+        "id": "example.vector",
+        "version": "1.0.0",
+        "digest": "sha256:94e6349f20a8f431a33209ea713ed4dcef4a7d10044f6ed40a0395a3936268db"
+      },
+      "suite": "suite",
+      "expect": "E_SUITE_MISMATCH"
+    }
+  ]
+}

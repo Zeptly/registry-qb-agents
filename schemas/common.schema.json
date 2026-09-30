@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:common:v1",
+  "title": "Zeptly Registry Protocol v0.2: shared definitions (QB registry rendering)",
+  "$comment": "Implements the common envelope vocabulary of the approved Zeptly Registry Protocol v0.1 as amended by v0.2 (JCS digests, digestAlgorithm, RuntimeLock, domains). Identifier grammar beyond the shared one, and lock code names, are QB-local where the amendment is silent.",
+  "$defs": {
+    "apiVersion": {
+      "const": "registry.zeptly.dev/v1alpha1"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "semverRange": {
+      "description": "npm-style semver range (^1.2.0, ~1.2, >=1.0.0 <2.0.0) or an exact version. Verified semantically by the validator.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[1-9]\\d*(s|m|h|d)$"
+    },
+    "registryName": {
+      "description": "The four class registries covered by the protocol. Platform contracts (capabilities, gateways, models) are NOT registries and are never referenced this way.",
+      "enum": [
+        "skills",
+        "tiny-agents",
+        "execution-agents",
+        "qb-agents"
+      ]
+    },
+    "artifactId": {
+      "description": "Registry-local artifact identifier: dot-separated lowercase slugs (e.g. research.web-fact-check, source-evaluation). Repository-independent.",
+      "type": "string",
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)*$"
+    },
+    "ref": {
+      "description": "Structured cross-registry reference {registry, id, version, digest?}. `version` may be a range in declarations; runtime resolution records an exact version and digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "#/$defs/registryName"
+        },
+        "id": {
+          "$ref": "#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/semverRange"
+        },
+        "digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "digestAlgorithm": {
+          "$ref": "#/$defs/digestAlgorithm"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "digest"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "digestAlgorithm"
+            ]
+          }
+        }
+      ]
+    },
+    "exactRef": {
+      "description": "Exact-version reference (provenance, resolution locks, lineage). Digest recommended.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "#/$defs/registryName"
+        },
+        "id": {
+          "$ref": "#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "digestAlgorithm": {
+          "$ref": "#/$defs/digestAlgorithm"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "digest"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "digestAlgorithm"
+            ]
+          }
+        }
+      ]
+    },
+    "platformId": {
+      "description": "OPAQUE platform-contract token (capability or gateway). Namespace ownership and gateway contracts are separate platform contracts and are unresolved; this registry does not interpret these tokens beyond shape.",
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(capability|gateway):[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)*$"
+    },
+    "gatewayId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^gateway:[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)*$"
+    },
+    "evidenceUri": {
+      "description": "Opaque pointer into an evidence store: evidence://<store>/<path>. Never a URL or filesystem path. Raw tapes/trajectories are never stored in Git.",
+      "type": "string",
+      "pattern": "^evidence://[a-z][a-z0-9-]*/[A-Za-z0-9._~/-]+$",
+      "maxLength": 256
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "human",
+            "automation"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "op",
+        "value"
+      ],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/slug"
+        },
+        "op": {
+          "enum": [
+            ">=",
+            ">",
+            "<=",
+            "<",
+            "=="
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    },
+    "riskLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "classification": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "maturity": {
+      "description": "Independent of origin and lifecycle. `candidate` is a registry object under evaluation; `canonical` is sealed, immutable and digest-addressed.",
+      "enum": [
+        "candidate",
+        "canonical"
+      ]
+    },
+    "lifecycle": {
+      "description": "Append-only overlay state, independent of maturity and origin.",
+      "enum": [
+        "active",
+        "deprecated",
+        "revoked"
+      ]
+    },
+    "originType": {
+      "enum": [
+        "native",
+        "upstream-seed",
+        "discovered",
+        "refined",
+        "evolved"
+      ]
+    },
+    "evolutionKind": {
+      "description": "Only location of the evolution kind is metadata.origin.evolution.kind.",
+      "enum": [
+        "discovered",
+        "refined",
+        "generalised"
+      ]
+    },
+    "digestAlgorithm": {
+      "const": "zeptly-jcs-v1",
+      "description": "Hash-contract identifier (RFC 8785 JCS + sha256). Contract changes require a new identifier and new vectors."
+    },
+    "domain": {
+      "enum": [
+        "production",
+        "synthetic"
+      ]
+    }
+  }
+}

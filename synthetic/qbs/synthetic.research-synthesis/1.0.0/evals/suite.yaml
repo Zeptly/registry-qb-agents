@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=../../../../../schemas/qb-eval-suite.schema.json
+# =====================================================================
+# SYNTHETIC EXAMPLE DATA. NOT REAL EXECUTION EVIDENCE.
+# Every identity, URI, dataset, metric, capability token and referenced id in this
+# file is fictional and exists only to exercise the registry tooling. Referenced
+# ids use the synthetic. namespace and resolve nowhere.
+# =====================================================================
+apiVersion: registry.zeptly.dev/v1alpha1
+kind: QBEvalSuite
+metadata:
+  registry: qb-agents
+  id: synthetic.research-synthesis
+  version: 1.0.0
+synthetic: true
+datasets:
+  - id: dataset:synthetic-example/golden-questions
+    version: ^1.0.0
+    split: test
+scenarios:
+  - id: market-landscape-basic
+    description: Broad market survey with several independent sub-questions.
+    tags:
+      - broad-survey
+    input:
+      question: Summarise the competitive landscape for managed vector databases.
+      depth: standard
+    expectations:
+      - Decomposes into 4+ independent sub-questions
+      - Every claim carries a citation
+    graders:
+      - citations-present
+      - rubric-quality
+  - id: contradictory-sources
+    description: Sources disagree; the QB must surface the contradiction rather than pick silently.
+    tags:
+      - verification
+    input:
+      question: What is the market size of edge AI accelerators in 2025?
+      depth: deep
+    environment:
+      web-search:
+        fixture: contradictory-market-sizes
+    expectations:
+      - Contradiction is reported
+      - Confidence is reduced
+    graders:
+      - contradiction-surfaced
+      - rubric-quality
+  - id: tool-outage-replan
+    description: Web search fails mid-run; the QB must replan or return a partial result.
+    input:
+      question: Review recent literature on retrieval-augmented generation evaluation.
+      depth: standard
+    environment:
+      web-search:
+        fault: unavailable-after-3-calls
+    expectations:
+      - Replans at least once
+      - Returns partial result or completes via alternate sources
+    graders:
+      - recovers-from-outage
+graders:
+  - id: citations-present
+    kind: deterministic
+    description: Every claim in output.citations has a non-empty source.
+  - id: contradiction-surfaced
+    kind: rubric
+    rubric:
+      - Report explicitly states the sources disagree
+      - Confidence below 0.8
+  - id: recovers-from-outage
+    kind: deterministic
+    description: Tape contains replan.triggered and a terminal session event.
+  - id: rubric-quality
+    kind: system-one-judge
+    rubric:
+      - Answers the question
+      - Claims are supported
+      - Uncertainty stated
+metrics:
+  - id: task-success-rate
+    unit: ratio
+    aggregate: mean
+  - id: citation-coverage
+    unit: ratio
+    aggregate: mean
+  - id: cost-p95
+    unit: usd
+    aggregate: p95
+  - id: latency-p95
+    unit: seconds
+    aggregate: p95
+  - id: replans-mean
+    unit: count
+    aggregate: mean
+runs:
+  repetitions: 3
+  minScenarioCoverage: 1
+gates:
+  candidate:
+    - metric: task-success-rate
+      op: ">="
+      value: 0.6
+  canonical:
+    - metric: task-success-rate
+      op: ">="
+      value: 0.85
+    - metric: citation-coverage
+      op: ">="
+      value: 0.95
+    - metric: cost-p95
+      op: <=
+      value: 12

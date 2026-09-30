@@ -1,0 +1,6 @@
+# Registry files use LF line endings (see docs/canonicalization.md).
+* text=auto eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf

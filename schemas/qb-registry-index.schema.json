@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:registry-index:v1",
+  "title": "Registry Index",
+  "$comment": "Derived, deterministic data (no timestamps or commit ids). Publication and retrieval mechanism is deferred by the protocol; this file is a local build artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "registry",
+    "domain",
+    "digestAlgorithm",
+    "entries"
+  ],
+  "properties": {
+    "apiVersion": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "RegistryIndex"
+    },
+    "registry": {
+      "const": "qb-agents"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registry",
+          "id",
+          "version",
+          "digest",
+          "maturity",
+          "lifecycle",
+          "origin",
+          "location",
+          "synthetic",
+          "references",
+          "compatibility",
+          "digestAlgorithm",
+          "domain"
+        ],
+        "properties": {
+          "registry": {
+            "const": "qb-agents"
+          },
+          "id": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+          },
+          "version": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+          },
+          "digest": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          },
+          "maturity": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/maturity"
+          },
+          "lifecycle": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/lifecycle"
+          },
+          "origin": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/originType"
+          },
+          "location": {
+            "type": "string",
+            "description": "Artifact location relative to the repository root."
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "sealed": {
+            "type": "boolean"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
+            }
+          },
+          "compatibility": {
+            "type": "object"
+          },
+          "replacedBy": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/exactRef"
+          },
+          "directorySeal": {
+            "description": "Present for canonical entries: the release record's directory seal.",
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          },
+          "digestAlgorithm": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+          },
+          "domain": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
+          }
+        }
+      }
+    },
+    "domain": {
+      "description": "`production` indexes never contain synthetic entries; `synthetic` indexes only contain synthetic entries.",
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
+    },
+    "digestAlgorithm": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "domain": {
+            "const": "production"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "synthetic": {
+                  "const": false
+                },
+                "domain": {
+                  "const": "production"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "domain": {
+            "const": "synthetic"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "synthetic": {
+                  "const": true
+                },
+                "domain": {
+                  "const": "synthetic"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        }
+      }
+    }
+  ]
+}

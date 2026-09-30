@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeptly:qb:schema:evidence-envelope:v1",
+  "title": "QB Evidence Envelope",
+  "description": "PROVISIONAL (ownership unresolved). Contract for ONE event on a QB execution tape, as emitted by a QB runtime into the evidence store. Defined here so runtime and registry agree on lineage; instances are never committed to this repository (except as test fixtures). A `resolution.locked` event payload is a ResolutionLock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "sessionId",
+    "runId",
+    "branchId",
+    "seq",
+    "ts",
+    "qb",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "eventId": {
+      "type": "string",
+      "pattern": "^qbe_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "sessionId": {
+      "description": "Root of a lineage tree: one user intent, possibly many runs/branches.",
+      "type": "string",
+      "pattern": "^qbs_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "runId": {
+      "description": "One execution attempt (a durable runtime run, including resumes).",
+      "type": "string",
+      "pattern": "^qbr_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "branchId": {
+      "type": "string",
+      "pattern": "^qbb_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "parentBranchId": {
+      "type": "string",
+      "pattern": "^qbb_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "forkedFromCheckpointId": {
+      "type": "string",
+      "pattern": "^qbc_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "seq": {
+      "description": "Monotonic position within the branch tape.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "qb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "id",
+        "version",
+        "digest"
+      ],
+      "properties": {
+        "registry": {
+          "const": "qb-agents"
+        },
+        "id": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/artifactId"
+        },
+        "version": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/semver"
+        },
+        "digest": {
+          "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": {
+          "type": "string"
+        },
+        "implementation": {
+          "type": "string"
+        },
+        "implementationVersion": {
+          "type": "string"
+        }
+      }
+    },
+    "type": {
+      "enum": [
+        "resolution.locked",
+        "session.started",
+        "session.completed",
+        "session.failed",
+        "plan.created",
+        "plan.revised",
+        "task.decomposed",
+        "delegation.decided",
+        "agent.dispatched",
+        "agent.returned",
+        "model.selected",
+        "capability.selected",
+        "jev.called",
+        "tool.called",
+        "tool.returned",
+        "evaluation.recorded",
+        "retry.scheduled",
+        "replan.triggered",
+        "checkpoint.created",
+        "branch.forked",
+        "run.resumed",
+        "rollback.performed",
+        "hitl.requested",
+        "hitl.resolved",
+        "escalation.raised",
+        "budget.threshold",
+        "failure.recorded"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "latencyMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "costUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tokensIn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokensOut": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "redaction": {
+      "enum": [
+        "none",
+        "pseudonymised",
+        "aggregate-only"
+      ]
+    }
+  },
+  "$comment": "PROVISIONAL OWNERSHIP: this evidence protocol may become a shared Zeptly platform-level contract rather than being owned by the QB registry. Do not treat this schema as the canonical Zeptly evidence contract. NOT YET CANONICAL."
+}
