@@ -20,6 +20,7 @@ metadata:
           id: synthetic.research-synthesis
           version: 1.0.0
           digest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+          digestAlgorithm: zeptly-jcs-v1
   maturity: candidate
   lifecycle: active
   synthetic: true
@@ -425,6 +426,7 @@ provenance:
       id: synthetic.research-synthesis
       version: 1.0.0
       digest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+      digestAlgorithm: zeptly-jcs-v1
   transformations:
     - kind: wisdom-of-compute
       description: Intermediate accept threshold 0.7 -> 0.75; maxReplans 3 -> 4. No permission, budget or contract changes.
@@ -444,7 +446,9 @@ security:
 attestations:
   - type: evaluation
     ref: evidence://synthetic-example/eval-runs/research-synthesis/1.1.0/candidate-1
-    subjectDigest: sha256:2bf4774732e5dca09d082a1499a974a1b2ec442dae2b4dc42509c56230d45f92
+    subjectDigest: sha256:e88816c00a060e744514f371d051b1181d5f1925b0348b4a7aa752f5dca3c4a0
+    # SYNTHETIC: re-bound by the Protocol v0.2 pass. The candidate's artifact digest changed because its digest-pinned sourceRefs now
+    # carry digestAlgorithm (an unpublished draft fixture); nothing was re-run and no evidence is invented.
     # SYNTHETIC: suite binding added by the local defect-remediation pass. No real evaluation was run; this fixture merely
     # claims the evaluation assessed exactly the suite below (evals/suite.yaml, digest as stored in the release payload).
     suite:

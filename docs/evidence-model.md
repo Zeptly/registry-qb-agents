@@ -31,7 +31,7 @@ Enforced: version directories accept only a fixed file allow-list (`E_UNEXPECTED
 ## Attestations
 
 `{type, ref (evidence://…), subjectDigest, capturedAt, synthetic, summary}`; `type: evaluation` adds `gate`
-(`candidate|canonical`), `result`, summary `metrics` and `suite` (`{registry,id,version,digest}` of the exact suite assessed; `E_SUITE_STALE`/`E_SUITE_MISMATCH`). Rules: `subjectDigest` MUST equal the artifact's current digest;
+(`candidate|canonical`), `result`, summary `metrics` and `suite` (`{id,version,digest}` of the exact suite assessed, optional `registry`; `E_SUITE_STALE`/`E_SUITE_MISMATCH`). Rules: `subjectDigest` MUST equal the artifact's current digest;
 a `pass` must actually satisfy the suite thresholds for its gate (`E_GATE`). Signing is deferred.
 
 Evaluation suites, evidence refs, lifecycle overlays and release records are linted for credentials (`E_SECRET`) and

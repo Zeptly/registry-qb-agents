@@ -35,7 +35,7 @@ jobs:
       - name: Build deterministic indexes (production + synthetic, built twice and compared)
         run: npm run build:index:verify
       - name: Production index must contain no synthetic entries
-        run: node -e 'const i=JSON.parse(require("fs").readFileSync("dist/index.json","utf8")); if(i.scope!=="production"||i.entries.some(e=>e.synthetic)){console.error("synthetic entry in production index");process.exit(1)} console.log("production index entries:",i.entries.length)'
+        run: node -e 'const i=JSON.parse(require("fs").readFileSync("dist/index.json","utf8")); if(i.domain!=="production"||i.entries.some(e=>e.synthetic)){console.error("synthetic entry in production index");process.exit(1)} console.log("production index entries:",i.entries.length)'
       - uses: actions/upload-artifact@v4
         with:
           name: registry-indexes

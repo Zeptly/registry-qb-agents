@@ -1,6 +1,6 @@
 # Architecture
 
-> Implements the approved **Zeptly Registry Protocol v0.1** (see [protocol-conformance.md](protocol-conformance.md)). Deferred items and QB-side choices are listed in [provisional.md](provisional.md).
+> Implements the **Zeptly Registry Protocol v0.1 as amended by v0.2** (see [protocol-conformance.md](protocol-conformance.md)). Deferred items and QB-side choices are listed in [provisional.md](provisional.md).
 
 ## Where this repository sits
 

@@ -66,11 +66,7 @@
               ],
               "properties": {
                 "kind": {
-                  "enum": [
-                    "refined",
-                    "discovered"
-                  ],
-                  "description": "Finer distinction within origin.type: evolved. Other kinds are not yet defined."
+                  "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/evolutionKind"
                 },
                 "sourceRefs": {
                   "type": "array",
@@ -1792,7 +1788,6 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "registry",
               "id",
               "version",
               "digest"

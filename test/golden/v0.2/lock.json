@@ -1,0 +1,407 @@
+{
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "comment": "Hand-derived from Protocol v0.2 section 6. Error code names are QB-local (the amendment only requires an explicit code).",
+  "subject": {
+    "registry": "qb-agents",
+    "id": "example.request-triage",
+    "version": "1.0.0",
+    "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+  },
+  "peers": [
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "1.0.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    },
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "1.2.0",
+      "maturity": "canonical",
+      "lifecycle": "deprecated",
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    },
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "1.3.0",
+      "maturity": "canonical",
+      "lifecycle": "revoked",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    },
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "1.4.0",
+      "maturity": "candidate",
+      "lifecycle": "active",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    },
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "2.0.0-rc.1",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    },
+    {
+      "registry": "skills",
+      "id": "example.skill",
+      "version": "2.0.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "production"
+    }
+  ],
+  "cases": [
+    {
+      "name": "range selects the highest eligible canonical version (skips deprecated, revoked and candidate)",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "1.0.0",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    },
+    {
+      "name": "deprecated versions resolve only by exact pin",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "1.2.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "1.2.0",
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    },
+    {
+      "name": "only-deprecated range is explicit",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.1.0 <1.3.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "deprecated-requires-exact-pin"
+      }
+    },
+    {
+      "name": "revoked never resolves, even by exact pin",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "1.3.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "revoked"
+      }
+    },
+    {
+      "name": "candidates need explicit opt-in",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "1.4.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "candidate-requires-opt-in"
+      }
+    },
+    {
+      "name": "candidates resolve with opt-in",
+      "domain": "production",
+      "allowCandidates": true,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "1.4.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "1.4.0",
+        "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    },
+    {
+      "name": "a plain range never selects a prerelease",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^2.0.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "2.0.0",
+        "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    },
+    {
+      "name": "a range naming a prerelease of the same version admits it",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": ">=2.0.0-rc.1 <2.0.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "2.0.0-rc.1",
+        "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    },
+    {
+      "name": "an exact prerelease pin resolves",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "2.0.0-rc.1"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "2.0.0-rc.1",
+        "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    },
+    {
+      "name": "^1.9.0 admits nothing in this index",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.9.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "no-satisfying-version"
+      }
+    },
+    {
+      "name": "malformed range",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "not a range"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "invalid-range"
+      }
+    },
+    {
+      "name": "digest pin matches the selected entry",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "digestAlgorithm": "zeptly-jcs-v1"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "1.0.0",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    },
+    {
+      "name": "digest pin mismatch",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0",
+        "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "digestAlgorithm": "zeptly-jcs-v1"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "digest-mismatch"
+      }
+    },
+    {
+      "name": "digest pin with another algorithm",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "digestAlgorithm": "other-v9"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "digest-algorithm-mismatch"
+      }
+    },
+    {
+      "name": "unknown id in a supplied index",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.missing",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "no-satisfying-version"
+      }
+    },
+    {
+      "name": "no peer index for the registry",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "tiny-agents",
+        "id": "example.tiny",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "no-peer-index"
+      }
+    },
+    {
+      "name": "no peer index at all",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "no-peer-index"
+      },
+      "peers": []
+    },
+    {
+      "name": "production subject never resolves synthetic entries (domains cannot mix)",
+      "domain": "production",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "domain-mismatch"
+      },
+      "peers": [
+        {
+          "registry": "skills",
+          "id": "example.skill",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "digestAlgorithm": "zeptly-jcs-v1",
+          "domain": "synthetic"
+        }
+      ]
+    },
+    {
+      "name": "synthetic subject never resolves production entries",
+      "domain": "synthetic",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "unresolved",
+        "code": "domain-mismatch"
+      }
+    },
+    {
+      "name": "synthetic subject resolves synthetic entries",
+      "domain": "synthetic",
+      "allowCandidates": false,
+      "requested": {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      "expect": {
+        "status": "resolved",
+        "version": "1.0.0",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "peers": [
+        {
+          "registry": "skills",
+          "id": "example.skill",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "digestAlgorithm": "zeptly-jcs-v1",
+          "domain": "synthetic"
+        }
+      ]
+    }
+  ],
+  "lock": {
+    "references": [
+      {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0"
+      },
+      {
+        "registry": "skills",
+        "id": "example.missing",
+        "version": "^1.0.0"
+      }
+    ]
+  }
+}

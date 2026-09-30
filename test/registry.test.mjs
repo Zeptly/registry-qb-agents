@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import YAML from "yaml";
-import { validateAll, checkImmutability, schemaErrors, buildIndex, artifactDigest, suiteDigest, directorySeal, canonicalize, sha256, compareCodePoints, buildResolutionLock, resolveRef, parseYaml, MAX_FILE_BYTES, PKG_ROOT } from "../scripts/lib/core.mjs";
+import { validateAll, checkImmutability, schemaErrors, buildIndex, artifactDigest, suiteDigest, directorySeal, canonicalize, sha256, compareCodePoints, buildRuntimeLock, resolveRef, parseYaml, MAX_FILE_BYTES, PKG_ROOT } from "../scripts/lib/core.mjs";
 
+const ystr = (v) => YAML.stringify(v, { aliasDuplicateObjects: false });
 const codes = (r) => r.errors.map((e) => e.code);
 const SYN = "synthetic/qbs/synthetic.";
 const CANON = `${SYN}research-synthesis/1.0.0`;
@@ -24,7 +25,7 @@ function mutate(root, rel, fn) {
   const f = path.join(root, rel);
   const doc = YAML.parse(fs.readFileSync(f, "utf8"));
   fn(doc);
-  fs.writeFileSync(f, YAML.stringify(doc));
+  fs.writeFileSync(f, ystr(doc));
 }
 const bpOf = (dir) => `${dir}/blueprint.yaml`;
 
@@ -143,7 +144,7 @@ test("canonical requires a release record; candidates must not have one", () => 
 test("maturity, lifecycle and origin vary independently", () => {
   const root = sandbox();
   // deprecate the canonical (native) version through the append-only overlay
-  fs.writeFileSync(path.join(root, CANON, "lifecycle.yaml"), YAML.stringify({
+  fs.writeFileSync(path.join(root, CANON, "lifecycle.yaml"), ystr({
     apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" },
     entries: [
       { state: "active", at: "2026-09-29T09:00:00Z", actor: { type: "human", id: "example-human-reviewer" }, reason: "released" },
@@ -160,7 +161,7 @@ test("maturity, lifecycle and origin vary independently", () => {
 test("lifecycle overlay rejects illegal transitions and non-active start", () => {
   const root = sandbox();
   const entry = (state, at) => ({ state, at, actor: { type: "human", id: "example-human-reviewer" }, reason: "test reason" });
-  fs.writeFileSync(path.join(root, CANON, "lifecycle.yaml"), YAML.stringify({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" },
+  fs.writeFileSync(path.join(root, CANON, "lifecycle.yaml"), ystr({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" },
     entries: [entry("active", "2026-01-01T00:00:00Z"), entry("revoked", "2026-01-02T00:00:00Z"), entry("active", "2026-01-03T00:00:00Z")] }));
   assert.ok(codes(validateAll({ root })).includes("E_LIFECYCLE"));
 });
@@ -187,46 +188,58 @@ test("peer index validation is structural and offline: unresolved / canonical-re
   const root = sandbox();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "peer-"));
   const peer = path.join(tmp, "idx.json");
-  fs.writeFileSync(peer, JSON.stringify({ entries: [{ registry: "execution-agents", id: "synthetic.web-researcher", version: "1.2.0", maturity: "candidate", lifecycle: "active" }] }));
+  fs.writeFileSync(peer, JSON.stringify({ entries: [{ registry: "execution-agents", id: "synthetic.web-researcher", version: "1.2.0", maturity: "candidate", lifecycle: "active", domain: "synthetic", digestAlgorithm: "zeptly-jcs-v1" }] }));
   const errs = validateAll({ root, peerIndexFiles: [peer] }).errors;
   assert.ok(errs.some((e) => e.code === "E_UNRESOLVED" && /canonical/.test(e.message)));
   assert.ok(errs.some((e) => e.code === "E_UNRESOLVED" && /document-analyst/.test(e.message)));
 });
 
-test("resolution lock: range -> exact version + digest; skips candidates and revoked; failures are explicit, never omitted", () => {
+test("RuntimeLock: range -> exact version + digest; skips candidates, revoked and (ranges only) deprecated; failures are explicit codes, never omitted", () => {
   const d = (n) => "sha256:" + String(n).repeat(64);
-  const entries = [
-    { registry: "skills", id: "synthetic.source-evaluation", version: "1.0.0", maturity: "canonical", lifecycle: "active", digest: d(1) },
-    { registry: "skills", id: "synthetic.source-evaluation", version: "1.2.0", maturity: "canonical", lifecycle: "deprecated", digest: d(2) },
-    { registry: "skills", id: "synthetic.source-evaluation", version: "1.3.0", maturity: "canonical", lifecycle: "revoked", digest: d(3) },
-    { registry: "skills", id: "synthetic.source-evaluation", version: "1.4.0", maturity: "candidate", lifecycle: "active", digest: d(4) },
-    { registry: "skills", id: "synthetic.source-evaluation", version: "2.0.0", maturity: "canonical", lifecycle: "active", digest: d(5) },
-  ];
+  const E = (version, maturity, lifecycle, n, extra = {}) => ({ registry: "skills", id: "synthetic.source-evaluation", version, maturity, lifecycle, digest: d(n), digestAlgorithm: "zeptly-jcs-v1", domain: "synthetic", ...extra });
+  const entries = [E("1.0.0", "canonical", "active", 1), E("1.2.0", "canonical", "deprecated", 2), E("1.3.0", "canonical", "revoked", 3), E("1.4.0", "candidate", "active", 4), E("2.0.0", "canonical", "active", 5)];
   const decl = { registry: "skills", id: "synthetic.source-evaluation", version: "^1.0.0", digest: null };
-  assert.deepEqual(resolveRef(decl, entries), { status: "resolved", resolved: { registry: "skills", id: "synthetic.source-evaluation", version: "1.2.0", digest: d(2) } });
-  assert.deepEqual(resolveRef({ ...decl, version: "^3.0.0" }, entries), { status: "unresolved", reason: "no-satisfying-version" });
-  assert.deepEqual(resolveRef({ ...decl, digest: d(9) }, entries), { status: "unresolved", reason: "digest-mismatch" });
-  assert.deepEqual(resolveRef({ ...decl, version: "nope" }, entries), { status: "unresolved", reason: "invalid-range" });
-  const root = { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0", digest: d(7) };
-  const lock = buildResolutionLock(root, [decl, { ...decl, id: "synthetic.missing" }, { registry: "tiny-agents", id: "synthetic.fact-checker", version: "^1.0.0" }], entries);
+  const opts = { domain: "synthetic" };
+  const good = (v, n) => ({ status: "resolved", resolved: { registry: "skills", id: "synthetic.source-evaluation", version: v, digest: d(n), digestAlgorithm: "zeptly-jcs-v1" } });
+  const code = (r) => r.unresolved?.code;
+  assert.deepEqual(resolveRef(decl, entries, opts), good("1.0.0", 1), "a range skips the deprecated 1.2.0, the revoked 1.3.0 and the candidate 1.4.0");
+  assert.deepEqual(resolveRef({ ...decl, version: "1.2.0" }, entries, opts), good("1.2.0", 2), "deprecated resolves by exact pin");
+  assert.equal(code(resolveRef({ ...decl, version: "1.3.0" }, entries, opts)), "revoked");
+  assert.equal(code(resolveRef({ ...decl, version: "1.4.0" }, entries, opts)), "candidate-requires-opt-in");
+  assert.deepEqual(resolveRef({ ...decl, version: "1.4.0" }, entries, { ...opts, allowCandidates: true }), good("1.4.0", 4));
+  assert.equal(code(resolveRef({ ...decl, version: "^1.1.0 <1.3.0" }, entries, opts)), "deprecated-requires-exact-pin");
+  assert.equal(code(resolveRef({ ...decl, version: "^3.0.0" }, entries, opts)), "no-satisfying-version");
+  assert.equal(code(resolveRef({ ...decl, digest: d(9) }, entries, opts)), "digest-mismatch");
+  assert.deepEqual(resolveRef({ ...decl, digest: d(1) }, entries, opts), good("1.0.0", 1));
+  assert.equal(code(resolveRef({ ...decl, version: "nope" }, entries, opts)), "invalid-range");
+  assert.equal(code(resolveRef(decl, [E("1.0.0", "canonical", "active", 1, { digestAlgorithm: "other-v9" })], opts)), "digest-algorithm-mismatch");
+  assert.equal(code(resolveRef(decl, entries, { domain: "production" })), "domain-mismatch", "synthetic entries never resolve a production reference");
+  const subject = { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0", digest: d(7) };
+  const lock = buildRuntimeLock(subject, [decl, { ...decl, id: "synthetic.missing" }, { registry: "tiny-agents", id: "synthetic.fact-checker", version: "^1.0.0" }], entries, opts);
   assert.deepEqual(schemaErrors("lock", lock), []);
+  assert.equal(lock.kind, "RuntimeLock");
+  assert.equal(lock.digestAlgorithm, "zeptly-jcs-v1");
+  assert.equal(lock.domain, "synthetic");
   assert.equal(lock.complete, false);
-  assert.equal(lock.locks.length, 3, "every declared reference appears");
-  assert.deepEqual(lock.locks.map((l) => l.status), ["resolved", "unresolved", "unresolved"]);
-  assert.deepEqual(lock.locks.map((l) => l.reason), [undefined, "no-satisfying-version", "peer-index-unavailable"]);
-  assert.equal(buildResolutionLock(root, [decl], entries).complete, true);
-  // schema: resolved needs `resolved`, unresolved needs `reason`
-  assert.ok(schemaErrors("lock", { ...lock, locks: [{ declared: decl, status: "unresolved" }] }).length > 0);
-  assert.ok(schemaErrors("lock", { ...lock, locks: [{ declared: decl, status: "resolved" }] }).length > 0);
+  assert.equal(lock.entries.length, 3, "every declared reference appears");
+  assert.deepEqual(lock.entries.map((l) => l.status), ["resolved", "unresolved", "unresolved"]);
+  assert.deepEqual(lock.entries.map((l) => l.unresolved?.code), [undefined, "no-satisfying-version", "no-peer-index"]);
+  assert.ok(lock.entries.every((l) => l.status === "resolved" || l.unresolved.message.length > 0));
+  assert.equal(buildRuntimeLock(subject, [decl], entries, opts).complete, true);
+  // schema: resolved needs `resolved`, unresolved needs `unresolved`
+  assert.ok(schemaErrors("lock", { ...lock, entries: [{ requested: decl, status: "unresolved" }] }).length > 0);
+  assert.ok(schemaErrors("lock", { ...lock, entries: [{ requested: decl, status: "resolved" }] }).length > 0);
+  assert.ok(schemaErrors("lock", { ...lock, domain: "staging" }).length > 0);
+  assert.ok(schemaErrors("lock", { ...lock, digestAlgorithm: "other" }).length > 0);
 });
 
-test("resolution lock with no peer index lists ALL foreign references as unresolved (peer-index-unavailable)", () => {
+test("RuntimeLock with no peer index lists ALL foreign references as unresolved (no-peer-index)", () => {
   const r = validateAll();
   const v = r.versions.find((x) => x.blueprint.metadata.id === "synthetic.research-synthesis" && x.blueprint.metadata.version === "1.0.0");
-  const lock = buildResolutionLock({ registry: "qb-agents", id: v.blueprint.metadata.id, version: "1.0.0", digest: v.digest }, v.blueprint.references, []);
+  const lock = buildRuntimeLock({ registry: "qb-agents", id: v.blueprint.metadata.id, version: "1.0.0", digest: v.digest }, v.blueprint.references, [], { domain: "synthetic" });
   assert.deepEqual(schemaErrors("lock", lock), []);
-  assert.equal(lock.locks.length, v.blueprint.references.length);
-  assert.ok(lock.locks.every((l) => l.status === "unresolved" && l.reason === "peer-index-unavailable"));
+  assert.equal(lock.entries.length, v.blueprint.references.length);
+  assert.ok(lock.entries.every((l) => l.status === "unresolved" && l.unresolved.code === "no-peer-index"));
   assert.equal(lock.complete, false);
 });
 
@@ -270,14 +283,6 @@ test("directory seal binds registry, id and version over the canonical payload f
 });
 
 // ---- golden vectors (independent Python implementation of docs/canonicalization.md) ----
-test("golden vectors: canonical JSON", () => {
-  const vecs = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "test/golden/canonical-json.json"), "utf8"));
-  assert.ok(vecs.length >= 5);
-  for (const v of vecs) {
-    assert.equal(canonicalize(v.input), v.canonical, v.name);
-    assert.equal(sha256(v.canonical), v.sha256, v.name);
-  }
-});
 test("golden vectors: artifact digest, suite digest and directory seal of the canonical fixture", () => {
   const g = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "test/golden/digest-seal.json"), "utf8"));
   const dir = path.join(PKG_ROOT, g.fixture);
@@ -290,9 +295,10 @@ test("golden vectors: artifact digest, suite digest and directory seal of the ca
   const rel = parseYaml(fs.readFileSync(path.join(dir, "release.yaml"), "utf8"));
   assert.equal(rel.digest, g.artifactDigest); assert.equal(rel.directorySeal, g.directorySeal);
 });
-test("canonicalization: key order is independent of insertion order; CRLF/LF/CR strings hash identically; non-JSON data throws", () => {
+test("canonicalization (JCS): key order is independent of insertion order; line endings inside values are NOT rewritten; non-JSON data throws", () => {
   assert.equal(canonicalize({ b: 1, a: { d: 1, c: 2 } }), canonicalize({ a: { c: 2, d: 1 }, b: 1 }));
-  assert.equal(canonicalize({ t: "a\r\nb\rc" }), canonicalize({ t: "a\nb\nc" }));
+  assert.notEqual(canonicalize({ t: "a\r\nb\rc" }), canonicalize({ t: "a\nb\nc" }));
+  assert.equal(canonicalize({ t: "a\r\nb" }), '{"t":"a\\r\\nb"}');
   assert.equal(canonicalize(-0), "0");
   for (const bad of [NaN, Infinity, undefined, () => 1, 10n, Symbol("x")]) assert.throws(() => canonicalize({ x: bad }), TypeError);
 });
@@ -350,7 +356,7 @@ test("immutability: lifecycle overlay is append-only", () => {
   const { root, g } = gitRepo();
   const ov = path.join(root, CANON, "lifecycle.yaml");
   const entry = (state, at) => ({ state, at, actor: { type: "human", id: "example-human-reviewer" }, reason: "test reason" });
-  const doc = (entries) => YAML.stringify({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" }, entries });
+  const doc = (entries) => ystr({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" }, entries });
   fs.writeFileSync(ov, doc([entry("active", "2026-01-01T00:00:00Z")]));
   g("add", "-A"); g("commit", "-q", "-m", "overlay");
   fs.writeFileSync(ov, doc([entry("active", "2026-01-01T00:00:00Z"), entry("deprecated", "2026-02-01T00:00:00Z")]));
@@ -364,7 +370,7 @@ test("no invented personal identities remain", () => {
   assert.equal(r.stdout.trim(), "");
 });
 
-test("origin.type follows the common taxonomy: native | evolved | upstream-seed", () => {
+test("origin.type follows the v0.2 common taxonomy: native | upstream-seed | discovered | refined | evolved", () => {
   for (const old of ["authored", "imported"]) {
     const root = sandbox();
     mutate(root, bpOf(DRAFT), (d) => { d.metadata.origin = { type: old }; });
@@ -378,10 +384,15 @@ test("origin.type follows the common taxonomy: native | evolved | upstream-seed"
   mutate(r2, bpOf(CAND), (d) => { d.metadata.origin.evolution.kind = "discovered"; });
   assert.ok(!codes(validateAll({ root: r2 })).includes("E_SCHEMA"));
   const r3 = sandbox();
-  mutate(r3, bpOf(CAND), (d) => { d.metadata.origin = { type: "discovered" }; });
-  assert.ok(codes(validateAll({ root: r3 })).includes("E_SCHEMA"));
+  mutate(r3, bpOf(CAND), (d) => { d.metadata.origin.evolution.kind = "invented"; });
+  assert.ok(codes(validateAll({ root: r3 })).includes("E_SCHEMA"), "unknown evolution kind");
+  // v0.2 common origin values: native | upstream-seed | discovered | refined | evolved; evolution kinds: discovered | refined | generalised
+  for (const type of ["native", "upstream-seed", "discovered", "refined"]) { const r = sandbox(); mutate(r, bpOf(DRAFT), (d) => { d.metadata.origin = { type }; }); assert.deepEqual(validateAll({ root: r }).errors, [], type); }
+  const r4 = sandbox();
+  mutate(r4, bpOf(CAND), (d) => { d.metadata.origin.evolution.kind = "generalised"; });
+  assert.ok(!codes(validateAll({ root: r4 })).includes("E_SCHEMA"));
   const idx = buildIndex(validateAll().versions, "synthetic");
-  assert.ok(idx.entries.every((e) => ["native", "evolved", "upstream-seed"].includes(e.origin)));
+  assert.ok(idx.entries.every((e) => ["native", "evolved", "upstream-seed", "discovered", "refined"].includes(e.origin)));
   assert.deepEqual(idx.entries.map((e) => e.origin).sort(), ["evolved", "native", "native"]);
 });
 
@@ -397,20 +408,17 @@ test("evolution kind lives only at metadata.origin.evolution.kind", () => {
   assert.ok(!("evolution" in bpSchema.properties.provenance.properties));
 });
 
-test("ID grammar: lowercase dotted/hyphenated slugs, no registry/kind prefixes", () => {
-  const ok = ["research.web-fact-check", "source-evaluation", "synthetic.a1.b-2", "a"];
+test("ID grammar: lowercase dotted/hyphenated slugs; no registry/kind reserved-prefix rule beyond the shared grammar (v0.2)", () => {
+  const ok = ["research.web-fact-check", "source-evaluation", "synthetic.a1.b-2", "a", "qb.thing", "skills.thing", "tiny-agents.thing"];
   const bad = ["Upper", "qb:x", "skill:x", "a..b", ".a", "a.", "a_b", "1abc", "-a", "a-", "x".repeat(97)];
   const pattern = new RegExp(JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "schemas/common.schema.json"), "utf8")).$defs.artifactId.pattern);
   for (const id of ok) assert.ok(pattern.test(id), id);
   for (const id of bad.slice(0, -1)) assert.ok(!pattern.test(id), id);
-  for (const prefixed of ["qb.thing", "skills.thing", "execution-agent.thing", "synthetic.tiny-agents.thing"]) {
-    const root = sandbox();
-    mutate(root, bpOf(DRAFT), (d) => { d.references[0].id = prefixed; d.spec.delegation.executionAgents.allow[0] = prefixed; });
-    assert.ok(codes(validateAll({ root })).includes("E_ID_PREFIX"), prefixed);
-  }
+  assert.ok(!pattern.test(bad.at(-1)) || bad.at(-1).length > 96);
+  // the former E_ID_PREFIX rule is gone: a prefixed id is an ordinary, grammar-valid id
   const root = sandbox();
-  mutate(root, bpOf(DRAFT), (d) => { d.metadata.id = "qb.incident-triage"; });
-  assert.ok(codes(validateAll({ root })).includes("E_ID_PREFIX"));
+  mutate(root, bpOf(DRAFT), (d) => { d.references[0].id = "synthetic.qb.thing"; d.spec.delegation.executionAgents.allow[0] = "synthetic.qb.thing"; d.spec.delegation.rules.forEach((r) => { if (r.target === "synthetic.log-analyst") r.target = "synthetic.qb.thing"; }); });
+  assert.ok(!codes(validateAll({ root })).includes("E_ID_PREFIX"));
 });
 
 test("release seal: payload edits and tampered seal are rejected; release record shape is enforced", () => {

@@ -6,6 +6,7 @@ metadata:
   id: synthetic.research-synthesis
   version: 1.0.0
 digest: sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c
+digestAlgorithm: zeptly-jcs-v1
 directorySeal: sha256:3582d779863dd5dbd8fd472e7011d4551444e57a21cc8af7be1e1a78fbf69afc
 payload:
   - path: blueprint.yaml

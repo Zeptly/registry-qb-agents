@@ -1,0 +1,50 @@
+{
+  "apiVersion": "registry.zeptly.dev/v1alpha1",
+  "kind": "RegistryIndex",
+  "registry": "peer-fixture",
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "domain": "synthetic",
+  "comment": "SYNTHETIC peer-index fixture (test data, not a real registry index). Resolves every reference of synthetic.research-synthesis 1.0.0.",
+  "entries": [
+    {
+      "registry": "execution-agents",
+      "id": "synthetic.web-researcher",
+      "version": "1.2.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "synthetic"
+    },
+    {
+      "registry": "execution-agents",
+      "id": "synthetic.document-analyst",
+      "version": "1.0.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "synthetic"
+    },
+    {
+      "registry": "tiny-agents",
+      "id": "synthetic.fact-checker",
+      "version": "1.1.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "synthetic"
+    },
+    {
+      "registry": "skills",
+      "id": "synthetic.source-citation",
+      "version": "1.0.3",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "digestAlgorithm": "zeptly-jcs-v1",
+      "domain": "synthetic"
+    }
+  ]
+}

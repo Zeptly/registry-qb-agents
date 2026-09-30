@@ -1,6 +1,6 @@
 # Contributing / promotion workflow
 
-Follows the Zeptly Registry Protocol v0.1 (see [docs/protocol-conformance.md](docs/protocol-conformance.md)). Git branches and
+Follows the Zeptly Registry Protocol v0.2 (see [docs/protocol-conformance.md](docs/protocol-conformance.md)). Git branches and
 pull requests are governance transport; **candidates are registry objects** (directories with `maturity: candidate`).
 
 ## Create a candidate

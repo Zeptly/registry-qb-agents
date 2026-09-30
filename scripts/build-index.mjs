@@ -9,12 +9,12 @@ import { buildIndex, validateAll, schemaErrors, PKG_ROOT } from "./lib/core.mjs"
 const { values } = parseArgs({ options: { verify: { type: "boolean" } } });
 const render = () => {
   const res = validateAll();
-  if (res.errors.length) { console.error("refusing to build an index from an invalid registry; run npm run validate"); process.exit(1); }
+  if (res.errors.length) { console.error("refusing to build an index from an invalid registry; run npm run validate"); process.exit(2); }
   const out = {};
   for (const scope of ["production", "synthetic"]) {
     const idx = buildIndex(res.versions, scope);
     const errs = schemaErrors("index", idx);
-    if (errs.length) { console.error(errs.join("\n")); process.exit(1); }
+    if (errs.length) { console.error(errs.join("\n")); process.exit(2); }
     out[scope] = JSON.stringify(idx, null, 2) + "\n";
   }
   return out;

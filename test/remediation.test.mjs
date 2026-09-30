@@ -12,6 +12,7 @@ import {
   findInvalidData, unsafeIntegerLiteral, lintSidecar, versionSatisfies, resolveRef, DataRejectedError, PKG_ROOT,
 } from "../scripts/lib/core.mjs";
 
+const ystr = (v) => YAML.stringify(v, { aliasDuplicateObjects: false });
 const codes = (r) => [...new Set(r.errors.map((e) => e.code))];
 const SYN = "synthetic/qbs/synthetic.";
 const CANON = `${SYN}research-synthesis/1.0.0`;
@@ -27,7 +28,7 @@ function sandbox() {
 }
 const read = (root, rel) => fs.readFileSync(path.join(root, rel), "utf8");
 const write = (root, rel, text) => fs.writeFileSync(path.join(root, rel), text);
-function mutate(root, rel, fn) { const d = YAML.parse(read(root, rel)); fn(d); write(root, rel, YAML.stringify(d)); }
+function mutate(root, rel, fn) { const d = YAML.parse(read(root, rel)); fn(d); write(root, rel, ystr(d)); }
 function gitRepo(pre) {
   const root = sandbox();
   if (pre) pre(root);
@@ -38,7 +39,7 @@ function gitRepo(pre) {
 }
 const imm = (root) => checkImmutability({ root, baseRef: "HEAD" });
 const immCodes = (root) => [...new Set(imm(root).map((e) => e.code))];
-const overlay = (id, version, entries) => YAML.stringify({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id, version }, entries });
+const overlay = (id, version, entries) => ystr({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "LifecycleOverlay", metadata: { registry: "qb-agents", id, version }, entries });
 const who = { type: "human", id: "example-human-reviewer" };
 
 /* ------------------------------------------------------------------ 1. invalid values rejected before clone/hash */
@@ -76,8 +77,8 @@ test("1. !!binary and other non-plain YAML values are rejected with a path", () 
   const root = sandbox();
   const f = bp(DRAFT);
   write(root, f, read(root, f).replace(/^spec:\n/m, "spec:\n  extensions:\n    bin: !!binary aGVsbG8=\n"));
-  const e = validateAll({ root }).errors.find((x) => x.code === "E_DATA_TYPE");
-  assert.ok(e); assert.equal(e.where, "/spec/extensions/bin"); assert.match(e.message, /Uint8Array|Buffer/);
+  const e = validateAll({ root }).errors.find((x) => x.code === "E_YAML_TAG");
+  assert.ok(e); assert.equal(e.where, "/spec/extensions/bin"); assert.match(e.message, /binary/);
 });
 test("1. artifactDigest/suiteDigest/canonicalize throw DataRejectedError (a TypeError) with a path and never coerce to null", () => {
   const good = parseYaml(read(PKG_ROOT, bp(CANON)));
@@ -187,11 +188,11 @@ test("3. peer-index validator and resolver share one prerelease policy (eligible
     const root = sandbox();
     mutate(root, bp(DRAFT), (d) => { d.references[0].version = range; });
     const peerFile = path.join(root, "peer.json");
-    const entries = [{ ...target, version, maturity: "canonical", lifecycle: "active", digest: "sha256:" + "a".repeat(64) }];
+    const entries = [{ ...target, version, maturity: "canonical", lifecycle: "active", digest: "sha256:" + "a".repeat(64), digestAlgorithm: "zeptly-jcs-v1", domain: "synthetic" }];
     fs.writeFileSync(peerFile, JSON.stringify({ entries }));
     const r = validateAll({ root, peerIndexFiles: [peerFile] });
     const validatorEligible = !r.errors.some((e) => e.code === "E_UNRESOLVED" && e.where.includes(target.id));
-    const resolverEligible = resolveRef({ ...target, version: range }, entries).status === "resolved";
+    const resolverEligible = resolveRef({ ...target, version: range }, entries, { domain: "synthetic" }).status === "resolved";
     assert.equal(validatorEligible, eligible, `validator ${version} vs ${range}`);
     assert.equal(resolverEligible, eligible, `resolver ${version} vs ${range}`);
     assert.equal(validatorEligible, resolverEligible, `paths disagree for ${version} vs ${range}`);
@@ -238,7 +239,7 @@ test("4. canonical id/registry change, version move with rename, and deletion ar
 test("4. sidecar identity of a canonical version is immutable; candidates stay free to change", () => {
   let { root } = gitRepo((r) => {
     fs.mkdirSync(path.join(r, CANON, "evidence"));
-    write(r, `${CANON}/evidence/refs.yaml`, YAML.stringify({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "QBEvidenceRefs", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" }, refs: [{ id: "r1", type: "benchmark", uri: "evidence://synthetic-example/b/1", capturedAt: "2026-09-29T00:00:00Z", synthetic: true, summary: "SYNTHETIC EXAMPLE, not real execution evidence. Probe." }] }));
+    write(r, `${CANON}/evidence/refs.yaml`, ystr({ apiVersion: "registry.zeptly.dev/v1alpha1", kind: "QBEvidenceRefs", metadata: { registry: "qb-agents", id: "synthetic.research-synthesis", version: "1.0.0" }, refs: [{ id: "r1", type: "benchmark", uri: "evidence://synthetic-example/b/1", capturedAt: "2026-09-29T00:00:00Z", synthetic: true, summary: "SYNTHETIC EXAMPLE, not real execution evidence. Probe." }] }));
     write(r, `${CANON}/lifecycle.yaml`, overlay("synthetic.research-synthesis", "1.0.0", [{ state: "active", at: "2026-09-29T09:00:00Z", actor: who, reason: "released" }]));
   });
   assert.deepEqual(imm(root), []);

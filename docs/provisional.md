@@ -17,7 +17,7 @@ The Zeptly Registry Protocol v0.1 is the approved baseline. This page separates 
 | runtime-trigger contract versioning | `spec.compatibility.runtime` is a declared range only |
 
 ## (b) Provisional QB-side contracts (may move to shared platform ownership)
-Evidence envelope and lineage ids; `ResolutionLock` shape; index entry shape.
+Evidence envelope and lineage ids; `RuntimeLock` unresolved-code names; index entry shape.
 
 ## (c) QB-registry choices where the protocol is silent (flag for reconciliation)
 
@@ -26,7 +26,7 @@ Evidence envelope and lineage ids; `ResolutionLock` shape; index entry shape.
 | Artifact id grammar | shared lowercase dotted/hyphenated slugs, no registry/kind prefixes |
 | `maturity` values | `candidate`, `canonical` only |
 | Candidate mutability | candidates may change until promoted; attestations go stale on any change |
-| Digest | see [canonicalization.md](canonicalization.md): sha256 of canonical JSON (code-point key order, LF) minus `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `security.approvals`, `attestations`; separate directory seal over the canonical payload files |
+| Digest | see [canonicalization.md](canonicalization.md): sha256 of RFC 8785 JCS (UTF-16 key order; `digestAlgorithm: zeptly-jcs-v1`) minus `metadata.version`, `metadata.maturity`, `metadata.lifecycle`, `security.approvals`, `attestations`; separate directory seal over the canonical payload files |
 | Seal point | promotion to `canonical` writes an immutable release record (digest, payload, directory seal) |
 | `evolution.kind` | `refined`, `discovered` (finer distinctions live here, never in `origin.type`); `origin.type` itself follows the common taxonomy `native\|evolved\|upstream-seed` |
 | Approval types | `security-review`, `release-approval` (human, digest-bound) |

@@ -9,6 +9,7 @@
     "apiVersion",
     "kind",
     "metadata",
+    "digestAlgorithm",
     "digest",
     "directorySeal",
     "payload",
@@ -85,7 +86,7 @@
       "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
     },
     "payload": {
-      "description": "Canonical payload files and their canonical digests, sorted by code-point path.",
+      "description": "Canonical payload files and their digests, sorted by POSIX path in code-point order.",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -107,6 +108,9 @@
           }
         }
       }
+    },
+    "digestAlgorithm": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
     }
   }
 }

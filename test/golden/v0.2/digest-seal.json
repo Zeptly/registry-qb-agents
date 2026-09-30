@@ -1,0 +1,1280 @@
+{
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "generator": "test/golden/v0.2/generate.py (independent implementation)",
+  "artifact": {
+    "apiVersion": "registry.zeptly.dev/v1alpha1",
+    "kind": "QBBlueprint",
+    "metadata": {
+      "id": "example.vector",
+      "registry": "qb-agents",
+      "version": "1.0.0",
+      "maturity": "canonical",
+      "lifecycle": "active",
+      "origin": {
+        "type": "evolved",
+        "evolution": {
+          "kind": "generalised",
+          "sourceRefs": [
+            {
+              "registry": "qb-agents",
+              "id": "example.vector",
+              "version": "0.9.0"
+            }
+          ]
+        }
+      },
+      "name": "Vector \u00e9\ud83d\ude00"
+    },
+    "spec": {
+      "\uffff": 1,
+      "\ud800\udc00": 2,
+      "limits": {
+        "maxCostUsd": 0.5,
+        "maxRuns": 100
+      },
+      "text": "line1\nline2\r\nline3"
+    },
+    "references": [
+      {
+        "registry": "skills",
+        "id": "example.skill",
+        "version": "^1.0.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "digestAlgorithm": "zeptly-jcs-v1"
+      }
+    ],
+    "provenance": {
+      "authors": [
+        {
+          "type": "human",
+          "id": "example-human"
+        }
+      ]
+    },
+    "security": {
+      "classification": "internal",
+      "capabilities": [
+        "capability:example"
+      ],
+      "approvals": [
+        {
+          "type": "release-approval",
+          "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    },
+    "attestations": [
+      {
+        "type": "evaluation",
+        "result": "pass",
+        "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
+  "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32",
+  "projectionCanonical": "{\"apiVersion\":\"registry.zeptly.dev/v1alpha1\",\"kind\":\"QBBlueprint\",\"metadata\":{\"id\":\"example.vector\",\"name\":\"Vector \u00e9\ud83d\ude00\",\"origin\":{\"evolution\":{\"kind\":\"generalised\",\"sourceRefs\":[{\"id\":\"example.vector\",\"registry\":\"qb-agents\",\"version\":\"0.9.0\"}]},\"type\":\"evolved\"},\"registry\":\"qb-agents\"},\"provenance\":{\"authors\":[{\"id\":\"example-human\",\"type\":\"human\"}]},\"references\":[{\"digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"digestAlgorithm\":\"zeptly-jcs-v1\",\"id\":\"example.skill\",\"registry\":\"skills\",\"version\":\"^1.0.0\"}],\"security\":{\"capabilities\":[\"capability:example\"],\"classification\":\"internal\"},\"spec\":{\"limits\":{\"maxCostUsd\":0.5,\"maxRuns\":100},\"text\":\"line1\\nline2\\r\\nline3\",\"\ud800\udc00\":2,\"\uffff\":1}}",
+  "excludedFieldChanges": [
+    {
+      "field": "metadata.version",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "2.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+    },
+    {
+      "field": "metadata.maturity",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "candidate",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+    },
+    {
+      "field": "metadata.lifecycle",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "revoked",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+    },
+    {
+      "field": "security.approvals",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": []
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+    },
+    {
+      "field": "attestations",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": []
+      },
+      "artifactDigest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+    }
+  ],
+  "includedFieldChanges": [
+    {
+      "field": "metadata.id",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.other",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:4576ab4268167ea584acd837650f59ac2812eb6cebeef2cc5fa5c52f464774b9"
+    },
+    {
+      "field": "metadata.registry",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "tiny-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:d244b39a663a557b0944c4e42708477f505ac11ed1b449af915a923c33441d09"
+    },
+    {
+      "field": "metadata.origin",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "refined",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:491e918ed2af79958b900db3e2babc44bcb01f69bee3d8a77b2dbc75e6f20dc9"
+    },
+    {
+      "field": "spec",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 101
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:7a0745345ed81e3145c8165228b8ad0d774d8fbb7ec060bde434205e63f5f2b1"
+    },
+    {
+      "field": "references",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.1.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:995459f928c67328a2db724f7b78e67c112cb1033e13c5b040135b16302a36ec"
+    },
+    {
+      "field": "references digestAlgorithm",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "other"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:820b47df5e136cdc5f3251aeb465b762203d6f097b55032e25a270c82d9cb344"
+    },
+    {
+      "field": "provenance",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "someone-else"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:7f7f97136e6ca7b39884c791e496504e1a9ff9bc6f31ad4ac8ebffcd45e11aa9"
+    },
+    {
+      "field": "security.classification",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "restricted",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:a1474c21424e122080d187e720d7a1344278caa43be418bbb7c5d2568e75322d"
+    },
+    {
+      "field": "security.capabilities",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example",
+            "capability:more"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:78fbea19d75e4a0154b9596d839284fb9d947547fb6d52884ea962dfb0977f3c"
+    },
+    {
+      "field": "line ending inside a value (LF vs CRLF is significant)",
+      "artifact": {
+        "apiVersion": "registry.zeptly.dev/v1alpha1",
+        "kind": "QBBlueprint",
+        "metadata": {
+          "id": "example.vector",
+          "registry": "qb-agents",
+          "version": "1.0.0",
+          "maturity": "canonical",
+          "lifecycle": "active",
+          "origin": {
+            "type": "evolved",
+            "evolution": {
+              "kind": "generalised",
+              "sourceRefs": [
+                {
+                  "registry": "qb-agents",
+                  "id": "example.vector",
+                  "version": "0.9.0"
+                }
+              ]
+            }
+          },
+          "name": "Vector \u00e9\ud83d\ude00"
+        },
+        "spec": {
+          "\uffff": 1,
+          "\ud800\udc00": 2,
+          "limits": {
+            "maxCostUsd": 0.5,
+            "maxRuns": 100
+          },
+          "text": "line1\r\nline2\r\nline3"
+        },
+        "references": [
+          {
+            "registry": "skills",
+            "id": "example.skill",
+            "version": "^1.0.0",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "digestAlgorithm": "zeptly-jcs-v1"
+          }
+        ],
+        "provenance": {
+          "authors": [
+            {
+              "type": "human",
+              "id": "example-human"
+            }
+          ]
+        },
+        "security": {
+          "classification": "internal",
+          "capabilities": [
+            "capability:example"
+          ],
+          "approvals": [
+            {
+              "type": "release-approval",
+              "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        },
+        "attestations": [
+          {
+            "type": "evaluation",
+            "result": "pass",
+            "subjectDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "artifactDigest": "sha256:80f85a75892fb5aca1b32f7fa5202851952927ba1e9b898e511c64832cf01423"
+    }
+  ],
+  "seal": {
+    "registry": "qb-agents",
+    "id": "example.vector",
+    "version": "1.0.0",
+    "payload": [
+      {
+        "path": "blueprint.yaml",
+        "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+      },
+      {
+        "path": "evals/suite.yaml",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "sortedPayload": [
+      {
+        "path": "blueprint.yaml",
+        "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+      },
+      {
+        "path": "evals/suite.yaml",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "directorySeal": "sha256:2581f6d2028c3df26a2187a025c52d7be174df560165f139b6ca5066b91c7e7a"
+  },
+  "sealCases": [
+    {
+      "name": "payload listed in reverse order seals identically (ordered by path)",
+      "payload": [
+        {
+          "path": "evals/suite.yaml",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        {
+          "path": "blueprint.yaml",
+          "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+        }
+      ],
+      "seal": "sha256:2581f6d2028c3df26a2187a025c52d7be174df560165f139b6ca5066b91c7e7a"
+    },
+    {
+      "name": "payload file mutation changes the seal",
+      "payload": [
+        {
+          "path": "blueprint.yaml",
+          "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+        },
+        {
+          "path": "evals/suite.yaml",
+          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      ],
+      "seal": "sha256:0e7c63105de827da4b9b07ff2723c5980d3c2f867e5bb6a4eac374776eb1cea0"
+    },
+    {
+      "name": "version is bound by the seal",
+      "version": "1.0.1",
+      "payload": [
+        {
+          "path": "blueprint.yaml",
+          "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+        },
+        {
+          "path": "evals/suite.yaml",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ],
+      "seal": "sha256:8116c84c149f5040b384766c64d3d3e8cabdafd60fe87b77cd1d98ef513118ed"
+    },
+    {
+      "name": "registry is bound by the seal",
+      "registry": "tiny-agents",
+      "payload": [
+        {
+          "path": "blueprint.yaml",
+          "digest": "sha256:f9cbee675db600ab2aa6841c1ba115d25a9db3a9a5b33f5a86301ef21e267c32"
+        },
+        {
+          "path": "evals/suite.yaml",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ],
+      "seal": "sha256:0d76b82dbe5699b5f4e2d904cfa04c61e83e5da54495808c9b64c3f5a9f996d9"
+    },
+    {
+      "name": "payload paths are ordered by code point (U+FF5E < U+1F600, the opposite of UTF-16 order)",
+      "payload": [
+        {
+          "path": "\ud83d\ude00.yaml",
+          "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        {
+          "path": "\uff5e.yaml",
+          "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      ],
+      "seal": "sha256:f82feb3322271a4a1a67f75f1bb5e00ac36e511b9a706c61735aec752eb3113d"
+    }
+  ]
+}

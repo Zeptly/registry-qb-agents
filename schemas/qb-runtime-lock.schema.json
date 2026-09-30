@@ -1,25 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:zeptly:qb:schema:resolution-lock:v1",
-  "title": "Resolution Lock",
-  "description": "declared range -> resolver -> exact version -> content digest -> runtime lock -> evidence. EVERY declared reference appears in `locks`: resolved ones carry the exact version and digest, unresolved ones carry an explicit reason (never silently omitted). `complete` is true only when all are resolved; an incomplete lock must not be treated as a runnable lock. No network access is needed to validate it.",
+  "$id": "urn:zeptly:qb:schema:runtime-lock:v1",
+  "title": "RuntimeLock",
+  "description": "Protocol v0.2 RuntimeLock: declared range -> explicit peer-index resolution -> exact version + digest. EVERY declared reference appears in `entries`; unresolved ones carry an explicit code and message. `complete` is true only when every entry resolved. A lock never mixes the production and synthetic domains. No transitive resolution or cycle handling (runtime responsibility).",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "apiVersion",
     "kind",
-    "root",
+    "digestAlgorithm",
+    "domain",
+    "subject",
     "complete",
-    "locks"
+    "entries"
   ],
   "properties": {
     "apiVersion": {
       "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/apiVersion"
     },
     "kind": {
-      "const": "ResolutionLock"
+      "const": "RuntimeLock"
     },
-    "root": {
+    "digestAlgorithm": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+    },
+    "domain": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
+    },
+    "subject": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -46,17 +54,17 @@
     "complete": {
       "type": "boolean"
     },
-    "locks": {
+    "entries": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "declared",
+          "requested",
           "status"
         ],
         "properties": {
-          "declared": {
+          "requested": {
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/ref"
           },
           "status": {
@@ -72,7 +80,8 @@
               "registry",
               "id",
               "version",
-              "digest"
+              "digest",
+              "digestAlgorithm"
             ],
             "properties": {
               "registry": {
@@ -86,16 +95,38 @@
               },
               "digest": {
                 "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+              },
+              "digestAlgorithm": {
+                "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
               }
             }
           },
-          "reason": {
-            "enum": [
-              "peer-index-unavailable",
-              "no-satisfying-version",
-              "digest-mismatch",
-              "invalid-range"
-            ]
+          "unresolved": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "enum": [
+                  "no-peer-index",
+                  "invalid-range",
+                  "no-satisfying-version",
+                  "digest-mismatch",
+                  "digest-algorithm-mismatch",
+                  "revoked",
+                  "deprecated-requires-exact-pin",
+                  "candidate-requires-opt-in",
+                  "domain-mismatch"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
         },
         "allOf": [
@@ -105,7 +136,10 @@
                 "status": {
                   "const": "resolved"
                 }
-              }
+              },
+              "required": [
+                "status"
+              ]
             },
             "then": {
               "required": [
@@ -113,7 +147,7 @@
               ],
               "not": {
                 "required": [
-                  "reason"
+                  "unresolved"
                 ]
               }
             }
@@ -124,11 +158,14 @@
                 "status": {
                   "const": "unresolved"
                 }
-              }
+              },
+              "required": [
+                "status"
+              ]
             },
             "then": {
               "required": [
-                "reason"
+                "unresolved"
               ],
               "not": {
                 "required": [

@@ -16,4 +16,4 @@ try {
 }
 errors.forEach((e) => console.log(`ERROR ${e.code} ${e.file}\n    ${e.message}`));
 console.log(`immutability vs ${values.base}: ${errors.length} error(s)`);
-process.exit(errors.length ? 1 : 0);
+process.exit(errors.length ? 2 : 0); // Protocol v0.2: exit 2 = validation errors

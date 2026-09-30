@@ -9,7 +9,8 @@
     "apiVersion",
     "kind",
     "registry",
-    "scope",
+    "domain",
+    "digestAlgorithm",
     "entries"
   ],
   "properties": {
@@ -21,13 +22,6 @@
     },
     "registry": {
       "const": "qb-agents"
-    },
-    "scope": {
-      "description": "`production` indexes never contain synthetic entries; `synthetic` indexes only contain synthetic entries.",
-      "enum": [
-        "production",
-        "synthetic"
-      ]
     },
     "entries": {
       "type": "array",
@@ -45,7 +39,9 @@
           "location",
           "synthetic",
           "references",
-          "compatibility"
+          "compatibility",
+          "digestAlgorithm",
+          "domain"
         ],
         "properties": {
           "registry": {
@@ -94,16 +90,29 @@
           "directorySeal": {
             "description": "Present for canonical entries: the release record's directory seal.",
             "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digest"
+          },
+          "digestAlgorithm": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
+          },
+          "domain": {
+            "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
           }
         }
       }
+    },
+    "domain": {
+      "description": "`production` indexes never contain synthetic entries; `synthetic` indexes only contain synthetic entries.",
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/domain"
+    },
+    "digestAlgorithm": {
+      "$ref": "urn:zeptly:qb:schema:common:v1#/$defs/digestAlgorithm"
     }
   },
   "allOf": [
     {
       "if": {
         "properties": {
-          "scope": {
+          "domain": {
             "const": "production"
           }
         }
@@ -115,6 +124,9 @@
               "properties": {
                 "synthetic": {
                   "const": false
+                },
+                "domain": {
+                  "const": "production"
                 }
               },
               "type": "object"
@@ -127,7 +139,7 @@
     {
       "if": {
         "properties": {
-          "scope": {
+          "domain": {
             "const": "synthetic"
           }
         }
@@ -139,6 +151,9 @@
               "properties": {
                 "synthetic": {
                   "const": true
+                },
+                "domain": {
+                  "const": "synthetic"
                 }
               },
               "type": "object"

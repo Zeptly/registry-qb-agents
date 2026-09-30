@@ -1,4 +1,4 @@
-// Core registry logic for the QB registry (Zeptly Registry Protocol v0.1 rendering).
+// Core registry logic for the QB registry (Zeptly Registry Protocol v0.2 rendering).
 // Pure data processing: no network access, no runtime behaviour.
 import fs from "node:fs";
 import path from "node:path";
@@ -14,14 +14,14 @@ export const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 export const REGISTRY = "qb-agents";
 export const SCOPES = { production: "qbs", synthetic: "synthetic/qbs" };
 export const SYNTHETIC_ID_PREFIX = "synthetic.";
+/** v0.2 hash-contract identifier; carried by every index entry, release/seal record, lock and digest-pinned reference. */
+export const DIGEST_ALGORITHM = "zeptly-jcs-v1";
 export const SYN_STORE = "evidence://synthetic-example/";
 export const LIFECYCLE_TRANSITIONS = { active: ["deprecated", "revoked"], deprecated: ["revoked"], revoked: [] };
 export const ALLOWED_FILES = new Set(["blueprint.yaml", "release.yaml", "lifecycle.yaml", "evals/suite.yaml", "evidence/refs.yaml"]);
 export const SCOPE_ROOT_FILES = new Set(["README.md"]);
 export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_VERSION_BYTES = 1024 * 1024;
-/** First id segment must not be a registry/kind word: the `registry` field carries that, ids stay prefix-free. */
-export const RESERVED_ID_PREFIXES = new Set(["skills", "skill", "tiny-agents", "tiny-agent", "tiny", "execution-agents", "execution-agent", "execution", "qb-agents", "qb-agent", "qb", "registry"]);
 const CLASSIFICATION_ORDER = ["public", "internal", "confidential", "restricted"];
 
 // ---------- helpers ----------
@@ -37,7 +37,9 @@ export function compareCodePoints(a, b) {
   }
   return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
 }
-const toLF = (s) => s.replace(/\r\n?/g, "\n");
+/** RFC 8785 sorts object keys by UTF-16 code units, which is exactly the default JS string comparison. */
+export const compareUtf16 = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const LONE_SURROGATE_RE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 const ptr = (p) => (p.length ? "/" + p.map((x) => String(x).replace(/~/g, "~0").replace(/\//g, "~1")).join("/") : "");
 
 /** Controlled rejection of data that cannot be canonicalised or hashed. `diagnostics` = [{code, path, message}] (path = JSON pointer). */
@@ -60,7 +62,8 @@ export function findInvalidData(value, p = [], out = [], depth = 0) {
   if (depth > MAX_DATA_DEPTH) { out.push(bad(p, `nesting deeper than ${MAX_DATA_DEPTH} levels (or a reference cycle)`)); return out; }
   if (value === null) return out;
   switch (typeof value) {
-    case "string": case "boolean": return out;
+    case "string": if (LONE_SURROGATE_RE.test(value)) out.push(bad(p, "string contains a lone surrogate (invalid Unicode)")); return out;
+    case "boolean": return out;
     case "number":
       if (!Number.isFinite(value)) out.push(bad(p, `non-finite number (${String(value)}) is not supported`));
       return out;
@@ -71,7 +74,7 @@ export function findInvalidData(value, p = [], out = [], depth = 0) {
       }
       const proto = Object.getPrototypeOf(value);
       if (proto !== Object.prototype && proto !== null) { out.push(bad(p, `unsupported value of type ${typeLabel(value)}`)); return out; }
-      for (const k of Object.keys(value)) findInvalidData(value[k], [...p, k], out, depth + 1);
+      for (const k of Object.keys(value)) { if (LONE_SURROGATE_RE.test(k)) out.push(bad([...p, k], "mapping key contains a lone surrogate (invalid Unicode)")); findInvalidData(value[k], [...p, k], out, depth + 1); }
       return out;
     }
     default: out.push(bad(p, `unsupported value of type ${typeLabel(value)}`)); return out;
@@ -90,16 +93,20 @@ export function cloneCanonicalData(value) {
 }
 
 /**
- * Canonical JSON (see docs/canonicalization.md): UTF-8, no insignificant whitespace, object keys sorted by code point,
- * array order preserved, numbers via ECMAScript Number-to-String (finite only), string values and keys normalised to LF line
- * endings. Anything that is not supported JSON data throws DataRejectedError (a TypeError) naming the offending path.
+ * RFC 8785 JSON Canonicalization Scheme (digestAlgorithm zeptly-jcs-v1): UTF-8 output, no insignificant whitespace, object keys
+ * sorted by UTF-16 code units, array order preserved, RFC 8785 string escaping (JSON.stringify for well-formed strings), numbers via
+ * the ECMAScript Number-to-String algorithm (finite only, -0 -> 0). No Unicode normalisation and no line-ending rewriting.
+ * Anything that is not supported JSON data (NaN, Infinity, lone surrogates, non-plain objects...) throws DataRejectedError naming the
+ * offending path; nothing is ever coerced.
  */
 export function canonicalize(v) { return ser(v, [], 0); }
 function ser(v, p, depth) {
   if (depth > MAX_DATA_DEPTH) throw new DataRejectedError([bad(p, `nesting deeper than ${MAX_DATA_DEPTH} levels (or a reference cycle)`)]);
   if (v === null) return "null";
   switch (typeof v) {
-    case "string": return JSON.stringify(toLF(v));
+    case "string":
+      if (LONE_SURROGATE_RE.test(v)) throw new DataRejectedError([bad(p, "string contains a lone surrogate (invalid Unicode)")]);
+      return JSON.stringify(v);
     case "boolean": return v ? "true" : "false";
     case "number":
       if (!Number.isFinite(v)) throw new DataRejectedError([bad(p, `non-finite number (${String(v)}) is not supported`)]);
@@ -112,9 +119,9 @@ function ser(v, p, depth) {
       }
       const proto = Object.getPrototypeOf(v);
       if (proto !== Object.prototype && proto !== null) throw new DataRejectedError([bad(p, `unsupported value of type ${typeLabel(v)}`)]);
-      const keys = Object.keys(v).map((k) => [toLF(k), k]).sort((x, y) => compareCodePoints(x[0], y[0]));
-      for (let i = 1; i < keys.length; i++) if (keys[i][0] === keys[i - 1][0]) throw new DataRejectedError([bad(p, "duplicate key after line-ending normalisation")]);
-      return `{${keys.map(([nk, k]) => `${JSON.stringify(nk)}:${ser(v[k], [...p, k], depth + 1)}`).join(",")}}`;
+      const keys = Object.keys(v).sort(compareUtf16);
+      for (const k of keys) if (LONE_SURROGATE_RE.test(k)) throw new DataRejectedError([bad([...p, k], "mapping key contains a lone surrogate (invalid Unicode)")]);
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${ser(v[k], [...p, k], depth + 1)}`).join(",")}}`;
     }
     default: throw new DataRejectedError([bad(p, `unsupported value of type ${typeLabel(v)}`)]);
   }
@@ -136,6 +143,18 @@ export function artifactDigest(bp) {
   return sha256(canonicalize(c));
 }
 export const suiteDigest = (suite) => sha256(canonicalize(suite));
+/**
+ * Suite binding (v0.2): an evaluation attestation names the exact suite it assessed, `{id, version, digest}` (an optional `registry`
+ * must match). Returns null when it binds the given suite, else {code: E_SUITE_MISMATCH (different suite identity) | E_SUITE_STALE
+ * (same suite id/version, different suite digest: the suite changed after the assessment)}.
+ */
+export function checkSuiteBinding(binding, suite) {
+  const m = suite.metadata;
+  if ((binding.registry !== undefined && binding.registry !== m.registry) || binding.id !== m.id || binding.version !== m.version) return { code: "E_SUITE_MISMATCH", message: `evaluation names suite ${binding.id}@${binding.version} but evals/suite.yaml is ${m.id}@${m.version}` };
+  const cur = suiteDigest(suite);
+  if (binding.digest !== cur) return { code: "E_SUITE_STALE", message: `evaluation assessed suite ${binding.digest} but the current suite digest is ${cur}; re-run the evaluation against the current suite (resealing does not refresh it)` };
+  return null;
+}
 
 /**
  * Directory seal over the canonical PAYLOAD files (blueprint.yaml via the artifact digest, evals/suite.yaml via its canonical
@@ -145,9 +164,12 @@ export const suiteDigest = (suite) => sha256(canonicalize(suite));
 export function directorySeal(bp, suite) {
   const payload = [{ path: "blueprint.yaml", digest: artifactDigest(bp) }];
   if (suite) payload.push({ path: "evals/suite.yaml", digest: suiteDigest(suite) });
-  payload.sort((a, b) => compareCodePoints(a.path, b.path));
-  const seal = sha256(canonicalize({ registry: bp.metadata.registry, id: bp.metadata.id, version: bp.metadata.version, payload }));
-  return { payload, seal };
+  return sealPayload(bp.metadata.registry, bp.metadata.id, bp.metadata.version, payload);
+}
+/** sha256(JCS({registry, id, version, payload})) with payload ordered by POSIX path in code-point order (v0.2 directory seal). */
+export function sealPayload(registry, id, version, payload) {
+  const sorted = [...payload].sort((a, b) => compareCodePoints(a.path, b.path));
+  return { payload: sorted, seal: sha256(canonicalize({ registry, id, version, payload: sorted })) };
 }
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
@@ -171,35 +193,76 @@ export function unsafeIntegerLiteral(src) {
   if (e + BigInt(D.length) - 1n > 15n) return true; // >= 1e16 > 2^53
   return BigInt(D) * 10n ** e > MAX_SAFE;
 }
-function scanNumberLiterals(doc) {
+const YAML_CORE_TAGS = new Set(["str", "int", "float", "bool", "null", "map", "seq"].map((t) => `tag:yaml.org,2002:${t}`));
+/**
+ * Walks the YAML AST (before any conversion to JS values) and reports everything outside the v0.2 JSON-compatible subset:
+ * anchors, aliases, merge keys (`<<`), non-string mapping keys (incl. collection keys), tags outside the core schema (!!binary,
+ * !!timestamp, !!set, local tags...) and integer literals outside the safe range (decided from the literal text, for values AND keys).
+ */
+function scanAst(doc) {
   const out = [];
-  const check = (n, p, what) => {
+  const checkNumber = (n, p, what) => {
     if (YAML.isScalar(n) && typeof n.value === "number" && Number.isFinite(n.value) && typeof n.source === "string" && unsafeIntegerLiteral(n.source)) {
       out.push(bad(p, `${what} ${n.source} is an integer outside the safe integer range (+/-9007199254740991) and would be rounded silently; use a value within range or quote it as a string`, "E_UNSAFE_INTEGER"));
     }
   };
+  const common = (n, p) => {
+    if (YAML.isAlias(n)) { out.push(bad(p, "YAML aliases are not allowed in manifests", "E_YAML_ALIAS")); return false; }
+    if (n?.anchor) out.push(bad(p, "YAML anchors are not allowed in manifests", "E_YAML_ALIAS"));
+    if (n?.tag && !YAML_CORE_TAGS.has(n.tag)) out.push(bad(p, `YAML tag ${n.tag} is not allowed (only core-schema str/int/float/bool/null/map/seq)`, "E_YAML_TAG"));
+    return true;
+  };
   const walk = (n, p) => {
-    if (YAML.isMap(n)) for (const pair of n.items) { const k = YAML.isScalar(pair.key) ? String(pair.key.source ?? pair.key.value) : "?"; check(pair.key, [...p, k], "mapping key"); walk(pair.value, [...p, k]); }
-    else if (YAML.isSeq(n)) n.items.forEach((x, i) => walk(x, [...p, i]));
-    else check(n, p, "numeric literal");
+    if (n === null || n === undefined) return;
+    if (!common(n, p)) return;
+    if (YAML.isMap(n)) {
+      for (const pair of n.items) {
+        const key = pair.key;
+        if (!YAML.isScalar(key)) { out.push(bad(p, "mapping keys must be plain strings (collection keys are not allowed)", "E_YAML_KEY")); continue; }
+        const k = String(key.source ?? key.value);
+        if (!common(key, [...p, k])) continue;
+        if (key.type === "PLAIN" && key.value === "<<") out.push(bad([...p, k], "YAML merge keys (<<) are not allowed in manifests", "E_YAML_MERGE"));
+        else if (typeof key.value !== "string") { checkNumber(key, [...p, k], "mapping key"); out.push(bad([...p, k], `mapping keys must be strings (got ${key.value === null ? "null" : typeof key.value} key ${k}); quote it to use it as a string`, "E_YAML_KEY")); }
+        walk(pair.value, [...p, k]);
+      }
+    } else if (YAML.isSeq(n)) n.items.forEach((x, i) => walk(x, [...p, i]));
+    else checkNumber(n, p, "numeric literal");
   };
   walk(doc.contents, []);
   return out;
 }
+const YAML_ERROR_CODES = { DUPLICATE_KEY: "E_DUPLICATE_KEY", MULTIPLE_DOCS: "E_YAML_MULTIDOC" };
 /**
- * Parses YAML 1.2 (core schema, unique keys). Rejects, with controlled DataRejectedError diagnostics, unsafe integer literals
- * (checked on the source text before rounding), non-finite numbers and unsupported value types (!!binary etc.).
+ * Parses a manifest with the Zeptly Registry Protocol v0.2 JSON-compatible YAML subset: YAML 1.2 core schema, single document,
+ * string keys only, unique keys, no anchors/aliases/merge keys/non-core tags, timestamps and yes/no/on/off stay strings, integers
+ * within +/-(2^53-1) (checked on the source literal before rounding), no non-finite numbers, no lone surrogates.
+ * Every rejection is a DataRejectedError carrying controlled [{code, path, message}] diagnostics; nothing else is ever thrown.
  */
 export function parseYaml(text) {
-  const doc = YAML.parseDocument(text, { schema: "core", uniqueKeys: true });
-  if (doc.errors.length) throw doc.errors[0];
-  const problems = scanNumberLiterals(doc);
+  let doc;
+  try { doc = YAML.parseDocument(text, { schema: "core", uniqueKeys: true }); } catch (e) { throw new DataRejectedError([{ code: "E_YAML", path: "", message: e.message }]); }
+  if (doc.errors.length) throw new DataRejectedError(doc.errors.map((e) => ({ code: YAML_ERROR_CODES[e.code] ?? "E_YAML", path: "", message: `${e.message.split("\n")[0]}${e.linePos ? ` (line ${e.linePos[0].line}, column ${e.linePos[0].col})` : ""}` })));
+  const problems = scanAst(doc);
+  if (doc.warnings.length && !problems.some((q) => q.code === "E_YAML_TAG")) problems.push(...doc.warnings.map((w) => ({ code: "E_YAML_TAG", path: "", message: w.message.split("\n")[0] })));
+  if (problems.length) throw new DataRejectedError(problems);
   const value = doc.toJS();
   problems.push(...findInvalidData(value));
   if (problems.length) throw new DataRejectedError(problems);
   return value;
 }
-const readYaml = (file) => parseYaml(fs.readFileSync(file, "utf8"));
+/**
+ * Decodes manifest bytes strictly (BOM, NUL, invalid UTF-8 and CR are rejected, never repaired) and parses them with parseYaml.
+ * Payload text files are UTF-8, BOM-free and LF-only; bytes are validated exactly as they will be hashed.
+ */
+export function parseManifestBytes(buf) {
+  if (buf.includes(0)) throw new DataRejectedError([{ code: "E_BINARY", path: "", message: "binary content (NUL byte) is not allowed" }]);
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) throw new DataRejectedError([{ code: "E_ENCODING", path: "", message: "file must be UTF-8 without BOM" }]);
+  let text;
+  try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buf); } catch { throw new DataRejectedError([{ code: "E_ENCODING", path: "", message: "file is not valid UTF-8" }]); }
+  if (text.includes("\r")) throw new DataRejectedError([{ code: "E_LINE_ENDING", path: "", message: "CR characters are not allowed; registry files use LF line endings (CRLF and lone CR are rejected, not normalised)" }]);
+  return parseYaml(text);
+}
+const readYaml = (file) => parseManifestBytes(fs.readFileSync(file));
 
 function walkStrings(node, cb, p = []) {
   if (typeof node === "string") cb(node, p);
@@ -221,7 +284,7 @@ export function getAjv() {
 const SCHEMA_IDS = {
   blueprint: "urn:zeptly:qb:schema:blueprint:v1", suite: "urn:zeptly:qb:schema:eval-suite:v1", refs: "urn:zeptly:qb:schema:evidence-refs:v1",
   release: "urn:zeptly:qb:schema:release:v1", lifecycle: "urn:zeptly:qb:schema:lifecycle:v1", index: "urn:zeptly:qb:schema:registry-index:v1",
-  envelope: "urn:zeptly:qb:schema:evidence-envelope:v1", lock: "urn:zeptly:qb:schema:resolution-lock:v1",
+  envelope: "urn:zeptly:qb:schema:evidence-envelope:v1", lock: "urn:zeptly:qb:schema:runtime-lock:v1",
 };
 export function schemaErrors(kind, data) {
   const validate = getAjv().getSchema(SCHEMA_IDS[kind]);
@@ -249,29 +312,30 @@ export function loadRegistry(root) {
   for (const [scope, sub] of Object.entries(SCOPES)) {
     const base = path.join(root, sub);
     if (!fs.existsSync(base)) continue;
+    const idLower = new Map();
     for (const idDir of fs.readdirSync(base, { withFileTypes: true })) {
       const idRel = `${sub}/${idDir.name}`;
+      if (idLower.has(idDir.name.toLowerCase())) se("E_CASE_COLLISION", idRel, `path collides with ${idLower.get(idDir.name.toLowerCase())} on case-insensitive file systems`);
+      else idLower.set(idDir.name.toLowerCase(), idRel);
       if (idDir.isSymbolicLink()) { se("E_SYMLINK", idRel, "symbolic links are not allowed"); continue; }
       if (!idDir.isDirectory()) { if (!SCOPE_ROOT_FILES.has(idDir.name)) se("E_UNEXPECTED_FILE", idRel, "only README.md may sit directly in a scope root"); continue; }
+      const verLower = new Map();
       for (const ver of fs.readdirSync(path.join(base, idDir.name), { withFileTypes: true })) {
         const vRel = `${idRel}/${ver.name}`;
+        if (verLower.has(ver.name.toLowerCase())) se("E_CASE_COLLISION", vRel, `path collides with ${verLower.get(ver.name.toLowerCase())} on case-insensitive file systems`);
+        else verLower.set(ver.name.toLowerCase(), vRel);
         if (ver.isSymbolicLink()) { se("E_SYMLINK", vRel, "symbolic links are not allowed"); continue; }
         if (!ver.isDirectory()) { se("E_UNEXPECTED_FILE", vRel, "only version directories may sit under an artifact id directory"); continue; }
         const dir = path.join(base, idDir.name, ver.name);
-        const entry = { scope, dirId: idDir.name, dirVersion: ver.name, dir, rel: vRel, errors: [], warnings: [], symlinks: [], files: [], bytes: 0 };
+        const entry = { scope, dirId: idDir.name, dirVersion: ver.name, dir, rel: vRel, errors: [], warnings: [], symlinks: [], special: [], files: [], bytes: 0 };
         walkVersion(dir, "", entry);
         const load = (name) => {
           if (!entry.files.includes(name)) return undefined;
           const f = path.join(dir, name), st = fs.lstatSync(f), ferr = (code, message, where) => entry.errors.push({ code, file: `${vRel}/${name}`, ...(where !== undefined ? { where } : {}), message });
           if (st.isSymbolicLink() || !st.isFile()) return null; // already reported by walkVersion
           if (st.size > MAX_FILE_BYTES) { ferr("E_SIZE", `file is ${st.size} bytes; the limit is ${MAX_FILE_BYTES}`); return null; }
-          const buf = fs.readFileSync(f);
-          if (buf.includes(0)) { ferr("E_BINARY", "binary content (NUL byte) is not allowed"); return null; }
-          const text = buf.toString("utf8");
-          if (!Buffer.from(text, "utf8").equals(buf) || text.charCodeAt(0) === 0xfeff) { ferr("E_ENCODING", "file must be UTF-8 without BOM"); return null; }
-          if (text.includes("\r")) ferr("E_LINE_ENDING", "CR characters are not allowed; registry files use LF line endings");
           let doc;
-          try { doc = parseYaml(text); } catch (e) {
+          try { doc = parseManifestBytes(fs.readFileSync(f)); } catch (e) {
             if (e instanceof DataRejectedError) { for (const d of e.diagnostics) ferr(d.code, d.message, d.path); } else ferr("E_YAML", e.message);
             return null;
           }
@@ -298,6 +362,7 @@ function walkVersion(dir, prefix, entry) {
     if (d.isDirectory()) { walkVersion(path.join(dir, d.name), `${rel}/`, entry); continue; }
     entry.files.push(rel);
     if (d.isFile()) entry.bytes += fs.lstatSync(path.join(dir, d.name)).size;
+    else entry.special.push(rel); // FIFO, socket, device: never read or hashed
   }
 }
 
@@ -356,6 +421,9 @@ export function validateVersion(v, ctx) {
   // repository hygiene: no runtime tapes / unexpected artifacts
   for (const f of v.files) if (!ALLOWED_FILES.has(f)) err("E_UNEXPECTED_FILE", "", `${f} is not on the filename allow-list (${[...ALLOWED_FILES].join(", ")}). Raw tapes, traces, transcripts and runtime payloads must stay in the evidence store, never in Git`, f);
   for (const f of v.symlinks) err("E_SYMLINK", "", "symbolic links are not allowed in registry artifacts", f);
+  for (const f of v.special) err("E_SPECIAL_FILE", "", "FIFOs, sockets and device files are not allowed in registry artifacts", f);
+  const lower = new Map();
+  for (const f of [...v.files, ...v.symlinks]) { const k = f.toLowerCase(); if (lower.has(k)) err("E_CASE_COLLISION", "", `path collides with ${lower.get(k)} on case-insensitive file systems`, f); else lower.set(k, f); }
   if (v.bytes > MAX_VERSION_BYTES) err("E_SIZE", "", `version directory is ${v.bytes} bytes; the limit is ${MAX_VERSION_BYTES}`, ".");
 
   // accepted sidecars are scanned for secrets/endpoints even when the blueprint itself is unusable
@@ -375,8 +443,6 @@ export function validateVersion(v, ctx) {
   // directory / scope identity
   if (id !== v.dirId) err("E_PATH", "/metadata/id", `directory ${v.dirId} does not match metadata.id ${id}`);
   if (md.version !== v.dirVersion) err("E_PATH", "/metadata/version", `directory ${v.dirVersion} does not match metadata.version ${md.version}`);
-  const idHead = (x) => x.split(".").filter((seg) => seg !== "synthetic")[0];
-  if (RESERVED_ID_PREFIXES.has(idHead(id))) err("E_ID_PREFIX", "/metadata/id", `ids must not start with a registry/kind word ("${idHead(id)}"); the registry field carries that`);
   const isSynthetic = md.synthetic === true;
   if (isSynthetic !== (v.scope === "synthetic")) err("E_SYNTHETIC", "/metadata/synthetic", v.scope === "synthetic" ? "artifacts under synthetic/ must set metadata.synthetic: true" : "synthetic artifacts may only live under synthetic/qbs/, never in the production namespace");
   if (isSynthetic !== id.startsWith(SYNTHETIC_ID_PREFIX)) err("E_SYNTHETIC", "/metadata/id", `synthetic artifacts must use the "${SYNTHETIC_ID_PREFIX}" id namespace and production artifacts must not`);
@@ -390,8 +456,8 @@ export function validateVersion(v, ctx) {
     if (refs.has(refKey(r))) err("E_REF_DUP", `/references/${i}`, `duplicate reference ${refKey(r)}`);
     refs.set(refKey(r), r);
     if (!semver.validRange(r.version)) err("E_RANGE", `/references/${i}/version`, `invalid semver range "${r.version}"`);
-    if (RESERVED_ID_PREFIXES.has(idHead(r.id))) err("E_ID_PREFIX", `/references/${i}/id`, `ids must not start with a registry/kind word ("${idHead(r.id)}")`);
     if (!ctx.registries.has(r.registry)) err("E_REGISTRY", `/references/${i}/registry`, `registry "${r.registry}" is not declared in registries.yaml`);
+    if (r.id.startsWith(SYNTHETIC_ID_PREFIX) !== isSynthetic) err("E_SYNTHETIC", `/references/${i}/id`, isSynthetic ? `synthetic artifacts may only reference synthetic artifacts (${SYNTHETIC_ID_PREFIX}*); production and synthetic domains cannot be mixed` : `production artifacts must never reference synthetic artifacts (${r.id})`);
     if (r.registry === REGISTRY && r.id === id) err("E_REF_SELF", `/references/${i}`, "an artifact cannot reference itself");
     if (r.registry === REGISTRY) err("E_NESTED_QB", `/references/${i}`, "nested QB execution is disabled; qb-agents references are not allowed as execution dependencies");
   });
@@ -465,7 +531,7 @@ export function validateVersion(v, ctx) {
 
   // ---- origin / provenance (WoC requirements preserved) ----
   const origin = md.origin;
-  if (origin.type !== "evolved" && origin.evolution) err("E_ORIGIN", "/metadata/origin", "evolution is only valid for origin.type: evolved");
+  if (!["evolved", "refined", "discovered"].includes(origin.type) && origin.evolution) err("E_ORIGIN", "/metadata/origin", "evolution is only valid for origin.type evolved, refined or discovered");
   if (!bp.provenance.authors.some((a) => a.type === "human")) err("E_PROVENANCE", "/provenance/authors", "at least one human author/approver is required (a QB never authors its own canonical definition)");
   for (const s of origin.evolution?.sourceRefs ?? []) {
     if (!bp.provenance.sourceRefs.some((p) => p.registry === s.registry && p.id === s.id && p.version === s.version)) err("E_PROVENANCE", "/provenance/sourceRefs", `origin.evolution.sourceRefs ${s.id}@${s.version} must also appear in provenance.sourceRefs`);
@@ -504,8 +570,9 @@ export function validateVersion(v, ctx) {
       // evaluation attestations must name and bind the exact suite assessed (identity = the suite's own metadata triple; digest = suiteDigest)
       bp.attestations.forEach((a, i) => {
         if (a.type !== "evaluation" || !a.suite) return;
-        if (a.suite.registry !== s.metadata.registry || a.suite.id !== s.metadata.id || a.suite.version !== s.metadata.version) err("E_SUITE_MISMATCH", `/attestations/${i}/suite`, `evaluation names suite ${a.suite.id}@${a.suite.version} but evals/suite.yaml is ${s.metadata.id}@${s.metadata.version}`);
-        else if (a.suite.digest !== curSuiteDigest) err("E_SUITE_STALE", `/attestations/${i}/suite/digest`, `evaluation assessed suite ${a.suite.digest} but the current suite digest is ${curSuiteDigest}; re-run the evaluation against the current suite (resealing does not refresh it)`);
+        const b = checkSuiteBinding(a.suite, s);
+        if (b?.code === "E_SUITE_MISMATCH") err(b.code, `/attestations/${i}/suite`, b.message);
+        else if (b?.code === "E_SUITE_STALE") err(b.code, `/attestations/${i}/suite/digest`, b.message);
       });
       if (s.metadata.id !== id || s.metadata.version !== md.version) err("E_SUITE", "/metadata", `suite targets ${s.metadata.id}@${s.metadata.version}, expected ${id}@${md.version}`, "evals/suite.yaml");
       if (s.synthetic !== isSynthetic) err("E_SYNTHETIC", "/synthetic", isSynthetic ? "synthetic artifacts must ship a synthetic suite" : "synthetic suites are only allowed for synthetic artifacts", "evals/suite.yaml");
@@ -581,6 +648,7 @@ export function validateVersion(v, ctx) {
     else if (v.release !== null) {
       for (const m of schemaErrors("release", v.release)) err("E_SCHEMA", "", m, "release.yaml");
       if (v.release.metadata?.id !== id || v.release.metadata?.version !== md.version) err("E_RELEASE", "/metadata", "release record identity mismatch", "release.yaml");
+      if (v.release.digestAlgorithm !== DIGEST_ALGORITHM) err("E_DIGEST_ALGORITHM", "/digestAlgorithm", `release record must declare digestAlgorithm ${DIGEST_ALGORITHM}`, "release.yaml");
       if (v.release.digest !== digest) err("E_DIGEST", "/digest", `artifact changed after release (release ${v.release.digest}, computed ${digest})`, "release.yaml");
       if (v.suite !== null) { // a rejected (invalid-data) suite already has diagnostics; its seal cannot be computed
       const { payload, seal } = directorySeal(bp, v.suite);
@@ -597,14 +665,16 @@ export function validateVersion(v, ctx) {
     if (!bp.security.approvals.some((a) => a.type === "release-approval" && a.actor.type === "human" && a.subjectDigest === digest)) err("E_PROMOTION", "/security/approvals", "canonical requires a human release-approval bound to the current digest");
   }
 
-  // ---- peer resolution (optional, offline-safe, local index files only) ----
+  // ---- peer resolution (optional, offline-safe, local index files only; same eligibility policy as the resolver) ----
   if (ctx.peers.length) {
-    for (const r of bp.references) {
-      const cand = ctx.peers.filter((p) => p.registry === r.registry && p.id === r.id && versionSatisfies(p.version, r.version) && p.lifecycle !== "revoked");
-      if (!cand.length) { (r.optional ? warn : err)("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, `no non-revoked ${r.registry}/${r.id} satisfies ${r.version} in the supplied indexes`); continue; }
-      if (md.maturity === "canonical" && !r.optional && !cand.some((p) => p.maturity === "canonical")) err("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, "a canonical QB requires canonical dependencies");
-      if (r.digest && !cand.some((p) => p.digest === r.digest)) err("E_DIGEST", `/references/${r.registry}/${r.id}`, "pinned digest matches no resolvable version");
-    }
+    bp.references.forEach((r, i) => {
+      const res = resolveRef(r, ctx.peers, { domain: v.scope, allowCandidates: md.maturity === "candidate" });
+      if (res.status === "resolved") return;
+      const { code, message } = res.unresolved;
+      const where = `/references/${i}`;
+      if (code === "digest-mismatch" || code === "digest-algorithm-mismatch") err("E_DIGEST", where, `${r.registry}/${r.id}: ${message}`);
+      else (r.optional ? warn : err)("E_UNRESOLVED", `/references/${r.registry}/${r.id}`, `${r.registry}/${r.id} ${r.version}: ${code}: ${message}`);
+    });
   }
 }
 
@@ -680,8 +750,31 @@ export function loadRegistries() {
   const cfg = readYaml(path.join(PKG_ROOT, "registries.yaml"));
   return new Set(Object.keys(cfg.registries));
 }
-export function loadPeerIndexes(files = []) {
-  return files.flatMap((f) => { const idx = JSON.parse(fs.readFileSync(f, "utf8")); return idx.entries ?? idx; });
+/**
+ * Loads local peer-index files ({entries: [...]} or a bare array). Never throws: unreadable or malformed files and entries are
+ * returned as controlled E_PEER_INDEX diagnostics (the caller reports them and exits 2).
+ */
+export function loadPeerIndexes(files = [], errors = []) {
+  const entries = [];
+  for (const f of files) {
+    let idx;
+    try { idx = JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { errors.push({ code: "E_PEER_INDEX", file: f, where: "", message: `cannot read peer index: ${e.message}` }); continue; }
+    const list = Array.isArray(idx) ? idx : idx?.entries;
+    if (!Array.isArray(list)) { errors.push({ code: "E_PEER_INDEX", file: f, where: "", message: "peer index must be an array or an object with an `entries` array" }); continue; }
+    list.forEach((e, i) => {
+      const problems = [];
+      if (!e || typeof e !== "object") problems.push("entry is not an object");
+      else {
+        for (const k of ["registry", "id", "version", "maturity", "lifecycle"]) if (typeof e[k] !== "string") problems.push(`${k} is required`);
+        if (typeof e.version === "string" && !semver.valid(e.version)) problems.push(`version ${e.version} is not a SemVer version`);
+        if (e.domain !== undefined && !["production", "synthetic"].includes(e.domain)) problems.push(`domain must be production or synthetic`);
+        if (e.digestAlgorithm !== undefined && e.digestAlgorithm !== DIGEST_ALGORITHM) problems.push(`digestAlgorithm must be ${DIGEST_ALGORITHM}`);
+      }
+      if (problems.length) errors.push({ code: "E_PEER_INDEX", file: f, where: `/entries/${i}`, message: problems.join("; ") });
+      else entries.push(e);
+    });
+  }
+  return entries;
 }
 
 const RUNTIME_ARTIFACT_RE = /\.(jsonl|ndjson|tapes?|har|traces?|transcripts?)$/i;
@@ -710,7 +803,8 @@ export function scanRuntimeArtifacts(root) {
 }
 
 export function validateAll({ root = PKG_ROOT, peerIndexFiles = [] } = {}) {
-  const ctx = { registries: loadRegistries(), peers: loadPeerIndexes(peerIndexFiles) };
+  const peerErrors = [];
+  const ctx = { registries: loadRegistries(), peers: loadPeerIndexes(peerIndexFiles, peerErrors) };
   const all = loadRegistry(root);
   const controlled = (v, e, where) => {
     if (e instanceof DataRejectedError) for (const d of e.diagnostics) v.errors.push({ code: d.code, file: `${v.rel}/blueprint.yaml`, where: d.path, message: d.message });
@@ -725,51 +819,81 @@ export function validateAll({ root = PKG_ROOT, peerIndexFiles = [] } = {}) {
     if (seen.has(key)) v.errors.push({ code: "E_DUP", file: `${v.rel}/blueprint.yaml`, where: "", message: `duplicate ${key} also at ${seen.get(key)}` });
     seen.set(key, v.rel);
   }
-  const repoErrors = [...(all.structureErrors ?? []), ...scanRuntimeArtifacts(root)];
+  const repoErrors = [...(all.structureErrors ?? []), ...scanRuntimeArtifacts(root), ...peerErrors];
   const seenErr = new Set();
   const errors = [...all.flatMap((v) => v.errors), ...repoErrors].filter((e) => { const k = `${e.code}|${e.file}|${e.where ?? ""}|${e.message}`; if (seenErr.has(k)) return false; seenErr.add(k); return true; });
   return { versions: all, errors, warnings: all.flatMap((v) => v.warnings) };
 }
 
-/** Deterministic derived index: a pure function of registry content (no timestamps, no commit ids). */
-export function buildIndex(all, scope) {
-  const entries = all.filter((v) => v.scope === scope && v.blueprint && v.digest && !v.errors.length).map((v) => {
+/** Deterministic derived index: a pure function of registry content (no timestamps, no commit ids). `domain` is production|synthetic. */
+export function buildIndex(all, domain) {
+  const entries = all.filter((v) => v.scope === domain && v.blueprint && v.digest && !v.errors.length).map((v) => {
     const bp = v.blueprint, md = bp.metadata;
     return {
-      registry: REGISTRY, id: md.id, version: md.version, digest: v.digest, maturity: md.maturity, lifecycle: md.lifecycle,
+      registry: REGISTRY, id: md.id, version: md.version, digest: v.digest, digestAlgorithm: DIGEST_ALGORITHM, domain, maturity: md.maturity, lifecycle: md.lifecycle,
       origin: md.origin.type, location: v.rel, synthetic: md.synthetic === true, sealed: md.maturity === "canonical",
       references: bp.references, compatibility: bp.spec.compatibility,
       ...(v.directorySeal ? { directorySeal: v.directorySeal } : {}),
       ...(v.overlay?.entries?.at(-1)?.replacedBy ? { replacedBy: v.overlay.entries.at(-1).replacedBy } : {}),
     };
-  }).sort((a, b) => compareCodePoints(a.id, b.id) || semver.compare(a.version, b.version));
-  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "RegistryIndex", registry: REGISTRY, scope, entries };
+  }).sort((a, b) => compareCodePoints(a.id, b.id) || semver.compare(a.version, b.version) || compareCodePoints(a.digest, b.digest));
+  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "RegistryIndex", registry: REGISTRY, digestAlgorithm: DIGEST_ALGORITHM, domain, entries };
 }
 
-// ---------- resolution (declared range -> exact version -> digest -> lock) ----------
+// ---------- resolution (declared range -> exact version -> digest -> RuntimeLock) ----------
+const unresolved = (code, message) => ({ status: "unresolved", unresolved: { code, message } });
 /**
- * Resolve one declared reference against index entries. Never throws for unresolvable references: the result is explicit.
- * Only canonical, non-revoked versions are selectable; candidates never are. Reasons: peer-index-unavailable (no entries at all
- * for that registry), invalid-range, no-satisfying-version, digest-mismatch.
+ * Resolve one declared reference against peer-index entries (Protocol v0.2 rules). Never throws for unresolvable references: the
+ * result is explicit. `opts.domain` (default production) is the subject's domain: entries of the other domain are never selected.
+ *  - malformed range -> invalid-range; no entries for the registry at all -> no-peer-index
+ *  - revoked versions never resolve; deprecated versions resolve only by exact pin; candidates only with opts.allowCandidates
+ *  - prereleases: npm semver `satisfies` without includePrerelease (the range itself must name the prerelease)
+ *  - digest pins must match the selected entry (and use the same digestAlgorithm)
+ * Highest eligible version wins. Not transitive; cycle handling is a runtime responsibility.
  */
-export function resolveRef(ref, entries) {
+export function resolveRef(ref, entries, opts = {}) {
+  const domain = opts.domain ?? "production";
   const range = semver.validRange(ref.version);
-  if (!range) return { status: "unresolved", reason: "invalid-range" };
-  if (!entries.some((e) => e.registry === ref.registry)) return { status: "unresolved", reason: "peer-index-unavailable" };
-  const c = entries.filter((e) => e.registry === ref.registry && e.id === ref.id && e.maturity === "canonical" && e.lifecycle !== "revoked" && versionSatisfies(e.version, ref.version));
-  if (!c.length) return { status: "unresolved", reason: "no-satisfying-version" };
-  c.sort((a, b) => semver.rcompare(a.version, b.version));
-  const hit = c[0];
-  if (ref.digest && ref.digest !== hit.digest) return { status: "unresolved", reason: "digest-mismatch" };
-  return { status: "resolved", resolved: { registry: hit.registry, id: hit.id, version: hit.version, digest: hit.digest } };
+  if (!range) return unresolved("invalid-range", `"${ref.version}" is not a valid semver range`);
+  const ofRegistry = entries.filter((e) => e.registry === ref.registry);
+  if (!ofRegistry.length) return unresolved("no-peer-index", `no peer index entries for registry ${ref.registry} were supplied`);
+  const matching = ofRegistry.filter((e) => e.id === ref.id && versionSatisfies(e.version, ref.version));
+  const inDomain = matching.filter((e) => (e.domain ?? "production") === domain);
+  if (!inDomain.length) return matching.length ? unresolved("domain-mismatch", `${ref.id} satisfying ${ref.version} exists only in the ${domain === "production" ? "synthetic" : "production"} domain; domains cannot be mixed`) : unresolved("no-satisfying-version", `no ${ref.registry}/${ref.id} version satisfies ${ref.version}`);
+  const exact = semver.valid(ref.version) !== null;
+  const revoked = inDomain.filter((e) => e.lifecycle === "revoked");
+  const live = inDomain.filter((e) => e.lifecycle !== "revoked");
+  const deprecated = live.filter((e) => e.lifecycle === "deprecated" && !exact);
+  const afterDeprecated = live.filter((e) => !(e.lifecycle === "deprecated" && !exact));
+  const candidates = afterDeprecated.filter((e) => e.maturity !== "canonical" && !opts.allowCandidates);
+  const eligible = afterDeprecated.filter((e) => e.maturity === "canonical" || opts.allowCandidates);
+  if (!eligible.length) {
+    if (revoked.length && !deprecated.length && !candidates.length) return unresolved("revoked", "every satisfying version is revoked; revoked versions never resolve");
+    if (deprecated.length && !candidates.length) return unresolved("deprecated-requires-exact-pin", "only deprecated versions satisfy the range; deprecated versions resolve only by exact version pin");
+    if (candidates.length) return unresolved("candidate-requires-opt-in", "only candidate versions satisfy the range; candidates require explicit opt-in (this reference needs a canonical version)");
+    return unresolved("no-satisfying-version", `no eligible ${ref.registry}/${ref.id} version satisfies ${ref.version}`);
+  }
+  eligible.sort((a, b) => semver.rcompare(a.version, b.version));
+  const hit = eligible[0];
+  if (hit.digestAlgorithm !== undefined && hit.digestAlgorithm !== DIGEST_ALGORITHM) return unresolved("digest-algorithm-mismatch", `index entry uses digestAlgorithm ${hit.digestAlgorithm}, expected ${DIGEST_ALGORITHM}`);
+  if (ref.digest && (ref.digestAlgorithm ?? DIGEST_ALGORITHM) !== DIGEST_ALGORITHM) return unresolved("digest-algorithm-mismatch", `reference pins a digest with digestAlgorithm ${ref.digestAlgorithm}, expected ${DIGEST_ALGORITHM}`);
+  if (ref.digest && ref.digest !== hit.digest) return unresolved("digest-mismatch", `pinned digest ${ref.digest} does not match the selected ${hit.id}@${hit.version} entry (${hit.digest})`);
+  return { status: "resolved", resolved: { registry: hit.registry, id: hit.id, version: hit.version, digest: hit.digest, digestAlgorithm: DIGEST_ALGORITHM } };
 }
-/** Every declared reference appears in the lock, in declaration order; unresolved ones are explicit, never omitted. */
-export function buildResolutionLock(root, references, entries) {
-  const locks = references.map((r) => {
-    const declared = { registry: r.registry, id: r.id, version: r.version, ...(r.digest ? { digest: r.digest } : {}) };
-    return { declared, ...resolveRef(r, entries) };
+/**
+ * RuntimeLock (Protocol v0.2). Every declared reference appears, in declaration order; unresolved ones carry an explicit code and
+ * message; `complete` is true only when every entry resolved. `opts.domain` is the subject's domain.
+ */
+export function buildRuntimeLock(subject, references, entries, opts = {}) {
+  const domain = opts.domain ?? "production";
+  const lockEntries = references.map((r) => {
+    const requested = { registry: r.registry, id: r.id, version: r.version, ...(r.digest ? { digest: r.digest, digestAlgorithm: r.digestAlgorithm ?? DIGEST_ALGORITHM } : {}) };
+    return { requested, ...resolveRef(r, entries, { ...opts, domain }) };
   });
-  return { apiVersion: "registry.zeptly.dev/v1alpha1", kind: "ResolutionLock", root, complete: locks.every((l) => l.status === "resolved"), locks };
+  return {
+    apiVersion: "registry.zeptly.dev/v1alpha1", kind: "RuntimeLock", digestAlgorithm: DIGEST_ALGORITHM, domain,
+    subject: { ...subject, digest: subject.digest }, complete: lockEntries.every((l) => l.status === "resolved"), entries: lockEntries,
+  };
 }
 
 // ---------- immutability (git-diff based) ----------

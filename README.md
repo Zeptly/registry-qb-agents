@@ -1,7 +1,7 @@
 # registry-qb-agents
 
 The canonical, Git-native registry of **QB (Quarterback) Agents** for Zeptly, implemented against the approved
-**Zeptly Registry Protocol v0.1** (common envelope, identity, versioning, references, provenance, lifecycle,
+**Zeptly Registry Protocol v0.2** (v0.1 envelope + v0.2 amendment) (common envelope, identity, versioning, references, provenance, lifecycle,
 evidence pointers, security metadata, indexing and resolution).
 
 A QB is an orchestration agent: it decomposes complex tasks, builds an execution strategy, delegates to Execution
@@ -62,7 +62,7 @@ npm ci
 npm run validate               # schema + semantic + provenance + security + synthetic-isolation + runtime-artifact scan
 npm test
 npm run build:index:verify     # dist/index.json (production) + dist/synthetic-index.json; built twice and compared
-npm run resolve -- <id>@<version> --scope synthetic --index <peer-index.json>   # offline ResolutionLock (unresolved refs listed; exit 3 if incomplete)
+npm run resolve -- <id>@<version> --scope synthetic --index <peer-index.json>   # offline RuntimeLock (unresolved refs listed with codes; exit 1 if incomplete, 2 on malformed input)
 npm run seal -- <id>@<version> [--scope synthetic] [--pr <ref>]                 # release record for canonical
 npm run check:immutability -- --base origin/main
 ```
@@ -72,7 +72,7 @@ npm run check:immutability -- --base origin/main
 | | |
 |---|---|
 | [Protocol conformance](docs/protocol-conformance.md) | Protocol rule → implementation map |
-| [Canonicalization](docs/canonicalization.md) | Canonical JSON, digest scope, directory seal, LF policy |
+| [Canonicalization](docs/canonicalization.md) | Manifest input subset, RFC 8785 JCS, digest scope, directory seal |
 | [Architecture](docs/architecture.md) | Boundaries, layout, lineage |
 | [Blueprint spec](docs/blueprint-spec.md) | Envelope and `spec` sections |
 | [Lifecycle, maturity & versioning](docs/lifecycle-versioning.md) | Maturity, lifecycle overlay, sealing, semver |

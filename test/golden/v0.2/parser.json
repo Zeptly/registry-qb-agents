@@ -1,0 +1,288 @@
+{
+  "digestAlgorithm": "zeptly-jcs-v1",
+  "comment": "Protocol v0.2 manifest input vectors. `text` cases are parsed as UTF-8 text; `bytes` cases are raw files. A rejection names the machine-readable code and, when given, the JSON-pointer path.",
+  "text": [
+    {
+      "name": "plain mapping",
+      "yaml": "a: 1\nb: [x, true, null]\n",
+      "expect": "ok",
+      "value": {
+        "a": 1,
+        "b": [
+          "x",
+          true,
+          null
+        ]
+      }
+    },
+    {
+      "name": "yes/no/on/off are strings",
+      "yaml": "a: yes\nb: no\nc: on\nd: off\nY: y\n",
+      "expect": "ok",
+      "value": {
+        "a": "yes",
+        "b": "no",
+        "c": "on",
+        "d": "off",
+        "Y": "y"
+      }
+    },
+    {
+      "name": "timestamps remain strings",
+      "yaml": "t: 2026-09-29T12:00:00Z\nd: 2026-09-29\n",
+      "expect": "ok",
+      "value": {
+        "t": "2026-09-29T12:00:00Z",
+        "d": "2026-09-29"
+      }
+    },
+    {
+      "name": "an explicit core tag is allowed",
+      "yaml": "a: !!str yes\n",
+      "expect": "ok",
+      "value": {
+        "a": "yes"
+      }
+    },
+    {
+      "name": "safe integer bounds and fractional numbers",
+      "yaml": "a: 9007199254740991\nb: -9007199254740991\nc: 1e3\nd: 0.5\ne: 1.0\nf: 123456789012345678.5\n",
+      "expect": "ok",
+      "value": {
+        "a": 9007199254740991,
+        "b": -9007199254740991,
+        "c": 1000,
+        "d": 0.5,
+        "e": 1,
+        "f": 123456789012345680
+      }
+    },
+    {
+      "name": "quoted numeric-looking keys are string keys",
+      "yaml": "\"1\": a\n",
+      "expect": "ok",
+      "value": {
+        "1": "a"
+      }
+    },
+    {
+      "name": "escaped surrogate pair is a valid character",
+      "yaml": "s: \"\\ud83d\\ude00\"\n",
+      "expect": "ok",
+      "value": {
+        "s": "\ud83d\ude00"
+      }
+    },
+    {
+      "name": "CR can be expressed only through an escape and is preserved",
+      "yaml": "s: \"a\\r\\nb\"\n",
+      "expect": "ok",
+      "value": {
+        "s": "a\r\nb"
+      }
+    },
+    {
+      "name": "duplicate keys",
+      "yaml": "a: 1\na: 2\n",
+      "expect": "reject",
+      "code": "E_DUPLICATE_KEY"
+    },
+    {
+      "name": "anchors",
+      "yaml": "a: &x 1\n",
+      "expect": "reject",
+      "code": "E_YAML_ALIAS",
+      "path": "/a"
+    },
+    {
+      "name": "aliases",
+      "yaml": "a: &x 1\nb: *x\n",
+      "expect": "reject",
+      "code": "E_YAML_ALIAS",
+      "path": "/b"
+    },
+    {
+      "name": "merge keys via alias",
+      "yaml": "base: &b {a: 1}\nm:\n  <<: *b\n",
+      "expect": "reject",
+      "code": "E_YAML_MERGE"
+    },
+    {
+      "name": "merge key",
+      "yaml": "m:\n  <<: {a: 1}\n",
+      "expect": "reject",
+      "code": "E_YAML_MERGE",
+      "path": "/m/<<"
+    },
+    {
+      "name": "multiple documents",
+      "yaml": "a: 1\n---\nb: 2\n",
+      "expect": "reject",
+      "code": "E_YAML_MULTIDOC"
+    },
+    {
+      "name": "integer key",
+      "yaml": "1: a\n",
+      "expect": "reject",
+      "code": "E_YAML_KEY",
+      "path": "/1"
+    },
+    {
+      "name": "null key",
+      "yaml": "~: a\n",
+      "expect": "reject",
+      "code": "E_YAML_KEY"
+    },
+    {
+      "name": "collection key",
+      "yaml": "? [1, 2]\n: v\n",
+      "expect": "reject",
+      "code": "E_YAML_KEY"
+    },
+    {
+      "name": "unsafe integer literal",
+      "yaml": "a: 9007199254740992\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER",
+      "path": "/a"
+    },
+    {
+      "name": "unsafe negative integer literal",
+      "yaml": "a: -9007199254740993\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER",
+      "path": "/a"
+    },
+    {
+      "name": "unsafe exponent form",
+      "yaml": "a: 1e16\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER",
+      "path": "/a"
+    },
+    {
+      "name": "unsafe hex literal",
+      "yaml": "a: 0x20000000000000\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER",
+      "path": "/a"
+    },
+    {
+      "name": "unsafe integer mapping key",
+      "yaml": "9007199254740993: x\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER"
+    },
+    {
+      "name": "unsafe integer inside a flow sequence",
+      "yaml": "a: [1, 99999999999999999999]\n",
+      "expect": "reject",
+      "code": "E_UNSAFE_INTEGER",
+      "path": "/a/1"
+    },
+    {
+      "name": "positive infinity",
+      "yaml": "a: .inf\n",
+      "expect": "reject",
+      "code": "E_DATA_TYPE",
+      "path": "/a"
+    },
+    {
+      "name": "negative infinity",
+      "yaml": "a: -.inf\n",
+      "expect": "reject",
+      "code": "E_DATA_TYPE",
+      "path": "/a"
+    },
+    {
+      "name": "NaN",
+      "yaml": "a: .nan\n",
+      "expect": "reject",
+      "code": "E_DATA_TYPE",
+      "path": "/a"
+    },
+    {
+      "name": "!!binary",
+      "yaml": "a: !!binary aGk=\n",
+      "expect": "reject",
+      "code": "E_YAML_TAG",
+      "path": "/a"
+    },
+    {
+      "name": "!!timestamp",
+      "yaml": "a: !!timestamp 2020-01-01\n",
+      "expect": "reject",
+      "code": "E_YAML_TAG",
+      "path": "/a"
+    },
+    {
+      "name": "!!set",
+      "yaml": "a: !!set {x}\n",
+      "expect": "reject",
+      "code": "E_YAML_TAG",
+      "path": "/a"
+    },
+    {
+      "name": "local tag",
+      "yaml": "a: !custom x\n",
+      "expect": "reject",
+      "code": "E_YAML_TAG"
+    },
+    {
+      "name": "lone surrogate escape",
+      "yaml": "s: \"\\ud800\"\n",
+      "expect": "reject",
+      "code": "E_DATA_TYPE",
+      "path": "/s"
+    },
+    {
+      "name": "lone surrogate escape in a key",
+      "yaml": "\"\\udc00\": 1\n",
+      "expect": "reject",
+      "code": "E_DATA_TYPE"
+    },
+    {
+      "name": "syntax error",
+      "yaml": "a: [1, 2\n",
+      "expect": "reject",
+      "code": "E_YAML"
+    }
+  ],
+  "bytes": [
+    {
+      "name": "UTF-8 BOM",
+      "bytesHex": "efbbbf613a2031",
+      "code": "E_ENCODING"
+    },
+    {
+      "name": "NUL byte",
+      "bytesHex": "613a203100",
+      "code": "E_BINARY"
+    },
+    {
+      "name": "invalid UTF-8 (stray 0xff)",
+      "bytesHex": "613a2022ff22",
+      "code": "E_ENCODING"
+    },
+    {
+      "name": "overlong UTF-8 encoding",
+      "bytesHex": "613a20c0af",
+      "code": "E_ENCODING"
+    },
+    {
+      "name": "UTF-8 encoded surrogate (CESU-8)",
+      "bytesHex": "613a20eda080",
+      "code": "E_ENCODING"
+    },
+    {
+      "name": "CRLF line endings",
+      "bytesHex": "613a20310d0a",
+      "code": "E_LINE_ENDING"
+    },
+    {
+      "name": "lone CR",
+      "bytesHex": "613a20310d",
+      "code": "E_LINE_ENDING"
+    }
+  ]
+}

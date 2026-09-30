@@ -14,4 +14,5 @@ if (values.json) {
   console.log(`\n${res.versions.length} blueprint version(s) checked: ${res.errors.length} error(s), ${res.warnings.length} warning(s)`);
   if (!(values["peer-index"] ?? []).length) console.log("note: cross-registry references were checked syntactically only (no --peer-index given)");
 }
-process.exit(res.errors.length || (values["warnings-as-errors"] && res.warnings.length) ? 1 : 0);
+// exit codes (Protocol v0.2): 0 valid, 2 malformed input or validation errors
+process.exit(res.errors.length || (values["warnings-as-errors"] && res.warnings.length) ? 2 : 0);

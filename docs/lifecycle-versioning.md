@@ -37,7 +37,7 @@ never changes the digest. Resolution (see [references](cross-registry-references
 `digest = sha256(canonical JSON of the artifact minus metadata.version, metadata.maturity, metadata.lifecycle, security.approvals,
 attestations)`. Included: identity, `spec`, `references`, `provenance`, security classification/capabilities. A separate **directory
 seal** over the canonical payload files (`blueprint.yaml` via its digest, `evals/suite.yaml`) binds registry, id and version and is
-written to the release record. Canonical JSON, the code-point comparator and the LF policy are defined in
+written to the release record. Canonical JSON, RFC 8785 JCS, the code-point comparator for indexes/paths and the LF-only payload policy are defined in
 [canonicalization.md](canonicalization.md).
 
 ## Semantic versioning

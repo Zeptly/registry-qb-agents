@@ -15,7 +15,7 @@ Each version that carries an evaluation attestation, and every canonical version
 
 ## Suite binding
 
-Every `evaluation` attestation carries `suite: {registry, id, version, digest}` (all required; local schema change).
+Every `evaluation` attestation carries `suite: {id, version, digest}` (`registry` optional, must match when present; Protocol v0.2).
 The identity must equal the suite's `metadata` (`E_SUITE_MISMATCH`) and `digest` must equal the current `suiteDigest`
 (`E_SUITE_STALE`). Because attestations are outside the artifact digest, this is what makes a suite edit stale the evaluation
 even when the blueprint digest is unchanged; resealing the directory alone does not revalidate an old evaluation — a new

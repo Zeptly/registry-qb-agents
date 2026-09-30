@@ -1,5 +1,6 @@
 {
-  "comment": "Golden vectors computed with an independent (Python) implementation of docs/canonicalization.md. Editing the fixture requires regenerating these deliberately.",
+  "comment": "Golden vectors computed with an independent (Python) implementation of the canonicalization contract. The fixture's digest, suite digest and directory seal are unchanged by Protocol v0.2 (ASCII keys sort identically under UTF-16 and code-point order; no CR in values). Editing the fixture requires regenerating these deliberately.",
+  "digestAlgorithm": "zeptly-jcs-v1",
   "fixture": "synthetic/qbs/synthetic.research-synthesis/1.0.0",
   "artifactDigest": "sha256:03a340e9b8f73fc60c9ddb6bdd52f0a0d9b3c48bd55231a216c6d38083a60e8c",
   "suiteDigest": "sha256:7865075e1831dd7509411df2662f176033c7996c418c6041fd47a132104aa3f3",
